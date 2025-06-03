@@ -18,9 +18,20 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include
 from django.views.generic import TemplateView
+from django.contrib.auth.decorators import login_required
+from django.shortcuts import redirect
+from django.contrib.auth import views as auth_views
+
+def home_view(request):
+    """Redirect logged-in users to dashboard, show landing page for anonymous users"""
+    if request.user.is_authenticated:
+        return redirect('dashboard')
+    return TemplateView.as_view(template_name='landing.html')(request)
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('', TemplateView.as_view(template_name='landing.html'), name='landing'),
+    path('', home_view, name='landing'),
+    path('accounts/', include('allauth.urls')),
+    path('dashboard/', login_required(TemplateView.as_view(template_name='dashboard.html')), name='dashboard'),
     path('sensors/', include('sensors.urls')),
 ]

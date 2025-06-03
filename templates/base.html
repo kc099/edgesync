@@ -20,7 +20,7 @@
     <!-- Page Specific JavaScript -->
     {% block extra_js %}{% endblock %}
 </head>
-<body>
+<body class="{% block extra_body_class %}{% endblock %}">
     <!-- Navigation -->
     <nav class="navbar">
         <div class="nav-container">
@@ -32,7 +32,8 @@
                 <a href="#features">Features</a>
                 <a href="#benefits">Benefits</a>
                 <a href="#solutions">Solutions</a>
-                <a href="#contact" class="cta-button">Get Started</a>
+                <a href="{% url 'account_login' %}">Login</a>
+                <a href="{% url 'account_signup' %}" class="cta-button">Sign Up</a>
                 {% endblock %}
             </div>
         </div>
@@ -57,7 +58,8 @@
                     <a href="#features">Features</a>
                     <a href="#benefits">Benefits</a>
                     <a href="#solutions">Solutions</a>
-                    <a href="#contact">Contact</a>
+                    <a href="{% url 'account_login' %}">Login</a>
+                    <a href="{% url 'account_signup' %}">Sign Up</a>
                     {% endblock %}
                 </div>
                 <div class="footer-section">

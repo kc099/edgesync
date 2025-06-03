@@ -1,3 +1,15 @@
+:root {
+    --primary-color: #2563eb;
+    --primary-dark: #1e40af;
+    --secondary-color: #64748b;
+    --text-color: #1f2937;
+    --text-light: #6b7280;
+    --border-color: #e5e7eb;
+    --background-light: #f9fafb;
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+}
+
 .auth-container {
     min-height: 100vh;
     display: flex;
@@ -31,6 +43,8 @@
     color: var(--text-light);
     cursor: pointer;
     transition: all 0.3s ease;
+    text-decoration: none;
+    text-align: center;
 }
 
 .auth-tab.active {
@@ -43,7 +57,7 @@
 }
 
 .auth-form {
-    display: none;
+    display: block;
 }
 
 .auth-form.active {
@@ -124,6 +138,19 @@
     outline: none;
     border-color: var(--primary-color);
     box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+/* Error Styling */
+.form-group input.error {
+    border-color: #dc2626;
+    box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
+}
+
+.error-text {
+    display: block;
+    margin-top: 0.25rem;
+    color: #dc2626;
+    font-size: 0.875rem;
 }
 
 .remember-me {
@@ -248,6 +275,29 @@
 }
 
 .terms a:hover {
+    text-decoration: underline;
+}
+
+/* Auth switch section */
+.auth-switch {
+    margin-top: 2rem;
+    text-align: center;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border-color);
+}
+
+.auth-switch p {
+    color: var(--text-light);
+    margin: 0;
+}
+
+.auth-switch a {
+    color: var(--primary-color);
+    text-decoration: none;
+    font-weight: 600;
+}
+
+.auth-switch a:hover {
     text-decoration: underline;
 }
 

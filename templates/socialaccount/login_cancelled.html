@@ -1,0 +1,36 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Login Cancelled - EdgeSync{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/auth.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="auth-container">
+    <div class="auth-box">
+        <div class="auth-content">
+            <div class="auth-form active" style="text-align: center;">
+                <h2>Login Cancelled</h2>
+                <p class="auth-subtitle">You cancelled the login process. No worries!</p>
+
+                <div style="margin: 2rem 0;">
+                    <i class="fas fa-times-circle" style="font-size: 3rem; color: var(--text-light);"></i>
+                </div>
+
+                <div class="social-auth">
+                    <a href="{% url 'account_login' %}" class="auth-button" style="display: inline-block; text-decoration: none; margin: 0;">
+                        Try Again
+                    </a>
+                    <p style="margin: 1rem 0 0 0;">
+                        <a href="{% url 'landing' %}" style="color: var(--primary-color); text-decoration: none;">
+                            ← Back to Home
+                        </a>
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

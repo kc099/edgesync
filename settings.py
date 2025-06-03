@@ -162,27 +162,4 @@ SOCIALACCOUNT_PROVIDERS = {
 }
 
 # Add custom social account adapter
-SOCIALACCOUNT_ADAPTER = 'edgesync.oauth_handlers.MergingSocialAccountAdapter'
-
-# Middleware settings
-MIDDLEWARE = [
-    'django.middleware.security.SecurityMiddleware',
-    'django.contrib.sessions.middleware.SessionMiddleware',
-    'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
-    'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'django.contrib.messages.middleware.MessageMiddleware',
-    'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'allauth.account.middleware.AccountMiddleware',
-]
-
-# Security middleware settings
-SECURE_SSL_REDIRECT = False
-SECURE_PROXY_SSL_HEADER = None
-SESSION_COOKIE_SECURE = False
-CSRF_COOKIE_SECURE = False
-SECURE_HSTS_SECONDS = 0
-SECURE_HSTS_INCLUDE_SUBDOMAINS = False
-SECURE_HSTS_PRELOAD = False
-
-# ... existing code ... 
+# SOCIALACCOUNT_ADAPTER = 'oauth_handlers.MergingSocialAccountAdapter' 
