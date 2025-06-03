@@ -34,4 +34,11 @@ urlpatterns = [
     path('accounts/', include('allauth.urls')),
     path('dashboard/', login_required(TemplateView.as_view(template_name='dashboard.html')), name='dashboard'),
     path('sensors/', include('sensors.urls')),
+    
+    # Documentation URLs
+    path('docs/', TemplateView.as_view(template_name='docs.html'), name='docs'),
+    path('docs/getting-started/', TemplateView.as_view(template_name='docs_getting_started.html'), name='docs_getting_started'),
+    path('docs/api-reference/', TemplateView.as_view(template_name='docs_api_reference.html'), name='docs_api_reference'),
+    path('docs/tutorials/', TemplateView.as_view(template_name='docs_tutorials.html'), name='docs_tutorials'),
+    path('docs/best-practices/', TemplateView.as_view(template_name='docs_best_practices.html'), name='docs_best_practices'),
 ]

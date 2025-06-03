@@ -1,0 +1,209 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Getting Started - EdgeSync Documentation{% endblock %}
+
+{% block meta_description %}Learn how to get started with EdgeSync IoT platform. Complete guide for setting up your account, registering devices, and creating your first dashboard.{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/docs.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="docs-layout">
+    <!-- Sidebar Navigation -->
+    <aside class="docs-sidebar">
+        <h3>Getting Started</h3>
+        <ul class="docs-nav">
+            <li><a href="#overview" class="active">Platform Overview</a></li>
+            <li><a href="#account-setup">Account Setup</a></li>
+            <li><a href="#device-registration">Device Registration</a></li>
+            <li><a href="#dashboard-creation">Dashboard Creation</a></li>
+            <li><a href="#next-steps">Next Steps</a></li>
+        </ul>
+        
+        <h3>Other Sections</h3>
+        <ul class="docs-nav">
+            <li><a href="{% url 'docs_api_reference' %}">API Reference</a></li>
+            <li><a href="{% url 'docs_tutorials' %}">Tutorials & Guides</a></li>
+            <li><a href="{% url 'docs_best_practices' %}">Best Practices</a></li>
+        </ul>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="docs-content">
+        <h1>Getting Started with EdgeSync</h1>
+        <p>Welcome to EdgeSync, the comprehensive multi-tenant IoT platform that empowers you to sync, visualize, and act on your data in real-time. This guide will walk you through the essential steps to get your IoT project up and running.</p>
+
+        <h2 id="overview">Platform Overview</h2>
+        <p>EdgeSync is a cloud-based IoT platform designed for data and device management, featuring:</p>
+        <ul>
+            <li><strong>Cloud-based MQTT broker management</strong> - Secure and scalable messaging</li>
+            <li><strong>Edge device registration</strong> - Simple device onboarding process</li>
+            <li><strong>Real-time data logging</strong> - Efficient data collection and storage</li>
+            <li><strong>Edge analytics</strong> - Process and analyze data at the edge</li>
+            <li><strong>EdgeBoard designer</strong> - Low-code dashboard creation tool</li>
+            <li><strong>Over-the-air updates</strong> - Keep devices current remotely</li>
+            <li><strong>Natural language automation</strong> - Intelligent workflow integration</li>
+        </ul>
+
+        <div class="alert info">
+            <strong>Note:</strong> EdgeSync leverages AWS IoT platform and state-of-the-art architecture for remarkable scalability and cost efficiency.
+        </div>
+
+        <h2 id="account-setup">Account Setup</h2>
+        <p>To begin using EdgeSync, you'll need to create an account and configure your initial settings.</p>
+
+        <h3>Creating Your Account</h3>
+        <ol>
+            <li>Visit the EdgeSync homepage and click "Sign Up"</li>
+            <li>Choose your preferred authentication method:
+                <ul>
+                    <li>Google OAuth (recommended for quick setup)</li>
+                    <li>Email and password registration</li>
+                </ul>
+            </li>
+            <li>Complete the verification process</li>
+            <li>Access your dashboard</li>
+        </ol>
+
+        <h3>Initial Configuration</h3>
+        <p>Once logged in, you'll be guided through the initial setup process:</p>
+        <ul>
+            <li><strong>Organization Setup:</strong> Define your organization details</li>
+            <li><strong>Project Creation:</strong> Create your first IoT project</li>
+            <li><strong>Security Settings:</strong> Configure access controls and permissions</li>
+        </ul>
+
+        <pre><code>// Example: Initial API configuration
+const edgeSync = new EdgeSyncClient({
+    apiKey: 'your-api-key',
+    region: 'us-east-1',
+    organization: 'your-org-id'
+});
+</code></pre>
+
+        <h2 id="device-registration">Device Registration</h2>
+        <p>EdgeSync makes device registration simple and secure. Follow these steps to register your first device:</p>
+
+        <h3>Device Types</h3>
+        <p>EdgeSync supports various device types:</p>
+        <ul>
+            <li><strong>ESP32 devices</strong> - Full OTA update support</li>
+            <li><strong>Industrial PLCs</strong> - Enhanced edge capabilities</li>
+            <li><strong>Custom IoT devices</strong> - Flexible integration options</li>
+            <li><strong>Sensors and actuators</strong> - Real-time data collection</li>
+        </ul>
+
+        <h3>Registration Process</h3>
+        <ol>
+            <li>Navigate to the "Devices" section in your dashboard</li>
+            <li>Click "Add New Device"</li>
+            <li>Select your device type and configuration</li>
+            <li>Generate device credentials</li>
+            <li>Configure device connection settings</li>
+        </ol>
+
+        <div class="alert warning">
+            <strong>Security Note:</strong> Always store device credentials securely and rotate them regularly for enhanced security.
+        </div>
+
+        <h3>Device Configuration</h3>
+        <pre><code>// Example: Device configuration for ESP32
+{
+    "deviceId": "esp32-sensor-001",
+    "deviceType": "ESP32",
+    "mqttEndpoint": "your-mqtt-broker.edgesync.com",
+    "certificates": {
+        "deviceCert": "-----BEGIN CERTIFICATE-----...",
+        "privateKey": "-----BEGIN PRIVATE KEY-----...",
+        "caCert": "-----BEGIN CERTIFICATE-----..."
+    },
+    "topics": {
+        "telemetry": "devices/esp32-sensor-001/telemetry",
+        "commands": "devices/esp32-sensor-001/commands"
+    }
+}
+</code></pre>
+
+        <h2 id="dashboard-creation">Dashboard Creation</h2>
+        <p>The EdgeBoard designer allows you to create stunning dashboards with a low-code approach.</p>
+
+        <h3>Dashboard Components</h3>
+        <ul>
+            <li><strong>Data Widgets:</strong> Charts, graphs, and gauges</li>
+            <li><strong>Control Panels:</strong> Buttons, sliders, and switches</li>
+            <li><strong>Status Indicators:</strong> LED indicators and status badges</li>
+            <li><strong>Custom Components:</strong> Build your own widgets</li>
+        </ul>
+
+        <h3>Creating Your First Dashboard</h3>
+        <ol>
+            <li>Access the EdgeBoard designer from your project dashboard</li>
+            <li>Choose a template or start from scratch</li>
+            <li>Drag and drop components onto the canvas</li>
+            <li>Configure data sources and bindings</li>
+            <li>Customize styling and layout</li>
+            <li>Publish your dashboard</li>
+        </ol>
+
+        <h3>Data Binding</h3>
+        <p>Connect your widgets to real-time device data:</p>
+        <pre><code>// Example: Widget data binding
+{
+    "widgetType": "gauge",
+    "dataSource": {
+        "deviceId": "esp32-sensor-001",
+        "topic": "devices/esp32-sensor-001/telemetry",
+        "field": "temperature"
+    },
+    "properties": {
+        "min": 0,
+        "max": 100,
+        "unit": "°C",
+        "thresholds": [
+            {"value": 30, "color": "green"},
+            {"value": 70, "color": "yellow"},
+            {"value": 90, "color": "red"}
+        ]
+    }
+}
+</code></pre>
+
+        <h2 id="next-steps">Next Steps</h2>
+        <p>Now that you have the basics set up, explore these advanced features:</p>
+
+        <h3>Advanced Features</h3>
+        <ul>
+            <li><a href="{% url 'docs_tutorials' %}#analytics">Edge Analytics</a> - Set up real-time data processing</li>
+            <li><a href="{% url 'docs_tutorials' %}#ota-updates">OTA Updates</a> - Configure over-the-air device updates</li>
+            <li><a href="{% url 'docs_api_reference' %}">API Integration</a> - Build custom applications</li>
+            <li><a href="{% url 'docs_best_practices' %}">Security Best Practices</a> - Secure your IoT deployment</li>
+        </ul>
+
+        <h3>Resources</h3>
+        <ul>
+            <li><a href="{% url 'docs_tutorials' %}">Comprehensive Tutorials</a></li>
+            <li><a href="{% url 'docs_api_reference' %}">Complete API Documentation</a></li>
+            <li><a href="mailto:support@edgesync.com">Technical Support</a></li>
+            <li>Community Forum (coming soon)</li>
+        </ul>
+
+        <div class="alert success">
+            <strong>Congratulations!</strong> You've completed the getting started guide. Your EdgeSync platform is ready for IoT development.
+        </div>
+    </main>
+
+    <!-- Table of Contents -->
+    <aside class="docs-toc">
+        <h4>On This Page</h4>
+        <ul class="toc-list">
+            <!-- TOC will be generated by JavaScript -->
+        </ul>
+    </aside>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/docs.js' %}"></script>
+{% endblock %}

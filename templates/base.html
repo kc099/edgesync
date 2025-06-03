@@ -4,7 +4,66 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}EdgeSync - Multi-Tenant IoT Platform{% endblock %}</title>
+    <title>{% block title %}EdgeSync - Multi-Tenant IoT Platform | Secure Cloud-Based Device Management{% endblock %}</title>
+    
+    <!-- SEO Meta Tags -->
+    <meta name="description" content="{% block meta_description %}EdgeSync is a comprehensive multi-tenant IoT platform offering cloud-based MQTT broker management, edge device registration, real-time analytics, and over-the-air updates for scalable IoT solutions.{% endblock %}">
+    <meta name="keywords" content="{% block meta_keywords %}IoT platform, MQTT broker, edge computing, device management, IoT analytics, over-the-air updates, multi-tenant IoT, cloud IoT, EdgeSync{% endblock %}">
+    <meta name="author" content="Roboworks Automation">
+    <meta name="robots" content="index, follow">
+    <link rel="canonical" href="{% block canonical_url %}https://edgesync.com{% endblock %}">
+    
+    <!-- Open Graph Meta Tags -->
+    <meta property="og:title" content="{% block og_title %}EdgeSync - Multi-Tenant IoT Platform{% endblock %}">
+    <meta property="og:description" content="{% block og_description %}Unleash unlimited scale for IoT developers and businesses with EdgeSync's cloud-based platform featuring MQTT broker management and real-time analytics.{% endblock %}">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="{% block og_url %}https://edgesync.com{% endblock %}">
+    <meta property="og:image" content="{% block og_image %}{% static 'images/edgesync-og-image.jpg' %}{% endblock %}">
+    <meta property="og:site_name" content="EdgeSync">
+    
+    <!-- Twitter Card Meta Tags -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="{% block twitter_title %}EdgeSync - Multi-Tenant IoT Platform{% endblock %}">
+    <meta name="twitter:description" content="{% block twitter_description %}Comprehensive IoT platform for data and device management with cloud-based MQTT broker.{% endblock %}">
+    <meta name="twitter:image" content="{% block twitter_image %}{% static 'images/edgesync-twitter-card.jpg' %}{% endblock %}">
+    
+    <!-- Structured Data -->
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "EdgeSync",
+        "description": "Multi-tenant IoT platform for data and device management with cloud-based MQTT broker",
+        "url": "https://edgesync.com",
+        "applicationCategory": "IoT Platform",
+        "operatingSystem": "Web-based",
+        "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD",
+            "description": "Free trial available"
+        },
+        "provider": {
+            "@type": "Organization",
+            "name": "Roboworks Automation",
+            "url": "https://edgesync.com"
+        },
+        "featureList": [
+            "Edge Device Registration",
+            "Edge Data Logging",
+            "Edge Analytics",
+            "EdgeBoard Designer",
+            "Over-the-air Updates",
+            "Natural Language Automation"
+        ]
+    }
+    </script>
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="{% static 'images/favicon.ico' %}">
+    <link rel="apple-touch-icon" sizes="180x180" href="{% static 'images/apple-touch-icon.png' %}">
+    <link rel="icon" type="image/png" sizes="32x32" href="{% static 'images/favicon-32x32.png' %}">
+    <link rel="icon" type="image/png" sizes="16x16" href="{% static 'images/favicon-16x16.png' %}">
     
     <!-- Common CSS -->
     <link rel="stylesheet" href="{% static 'css/base.css' %}">
@@ -32,6 +91,7 @@
                 <a href="#features">Features</a>
                 <a href="#benefits">Benefits</a>
                 <a href="#solutions">Solutions</a>
+                <a href="{% url 'docs' %}">Docs</a>
                 <a href="{% url 'account_login' %}">Login</a>
                 <a href="{% url 'account_signup' %}" class="cta-button">Sign Up</a>
                 {% endblock %}
@@ -58,6 +118,7 @@
                     <a href="#features">Features</a>
                     <a href="#benefits">Benefits</a>
                     <a href="#solutions">Solutions</a>
+                    <a href="{% url 'docs' %}">Docs</a>
                     <a href="{% url 'account_login' %}">Login</a>
                     <a href="{% url 'account_signup' %}">Sign Up</a>
                     {% endblock %}
@@ -94,4 +155,4 @@
         };
     </script>
 </body>
-</html> 
+</html>

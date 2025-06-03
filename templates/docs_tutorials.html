@@ -1,0 +1,453 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Tutorials & Guides - EdgeSync Documentation{% endblock %}
+
+{% block meta_description %}Step-by-step tutorials for EdgeSync IoT platform including EdgeBoard design, OTA updates, MQTT setup, and analytics configuration.{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/docs.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="docs-layout">
+    <!-- Sidebar Navigation -->
+    <aside class="docs-sidebar">
+        <h3>Tutorials & Guides</h3>
+        <ul class="docs-nav">
+            <li><a href="#overview" class="active">Tutorial Overview</a></li>
+            <li><a href="#edgeboard">EdgeBoard Designer</a></li>
+            <li><a href="#ota-updates">OTA Updates</a></li>
+            <li><a href="#mqtt-setup">MQTT Broker Setup</a></li>
+            <li><a href="#analytics">Analytics & Monitoring</a></li>
+            <li><a href="#data-logging">Data Logging</a></li>
+            <li><a href="#workflows">Automation Workflows</a></li>
+        </ul>
+        
+        <h3>Other Sections</h3>
+        <ul class="docs-nav">
+            <li><a href="{% url 'docs_getting_started' %}">Getting Started</a></li>
+            <li><a href="{% url 'docs_api_reference' %}">API Reference</a></li>
+            <li><a href="{% url 'docs_best_practices' %}">Best Practices</a></li>
+        </ul>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="docs-content">
+        <h1>Tutorials & Guides</h1>
+        <p>Comprehensive step-by-step tutorials to help you master EdgeSync's advanced features and build sophisticated IoT solutions.</p>
+
+        <h2 id="overview">Tutorial Overview</h2>
+        <p>These tutorials are designed to take you from basic concepts to advanced implementations:</p>
+        <ul>
+            <li><strong>Beginner:</strong> Basic device setup and dashboard creation</li>
+            <li><strong>Intermediate:</strong> Advanced analytics and automation workflows</li>
+            <li><strong>Advanced:</strong> Custom integrations and enterprise deployments</li>
+        </ul>
+
+        <div class="alert info">
+            <strong>Prerequisites:</strong> Complete the <a href="{% url 'docs_getting_started' %}">Getting Started</a> guide before proceeding with these tutorials.
+        </div>
+
+        <h2 id="edgeboard">EdgeBoard Designer Tutorial</h2>
+        <p>Learn to create stunning, interactive dashboards using EdgeSync's low-code EdgeBoard designer.</p>
+
+        <h3>Creating Your First Dashboard</h3>
+        <p>The EdgeBoard designer provides a visual interface for creating IoT dashboards without coding.</p>
+
+        <h4>Step 1: Access the Designer</h4>
+        <ol>
+            <li>Navigate to your project dashboard</li>
+            <li>Click "EdgeBoard Designer" in the main menu</li>
+            <li>Choose "Create New Dashboard" or select a template</li>
+        </ol>
+
+        <h4>Step 2: Add Widgets</h4>
+        <p>Drag and drop widgets from the component palette:</p>
+        <ul>
+            <li><strong>Gauge Widget:</strong> Display numeric values with visual indicators</li>
+            <li><strong>Chart Widget:</strong> Time-series data visualization</li>
+            <li><strong>Status Widget:</strong> Device status and health indicators</li>
+            <li><strong>Control Widget:</strong> Buttons and sliders for device control</li>
+        </ul>
+
+        <pre><code>// Example: Gauge widget configuration
+{
+    "type": "gauge",
+    "title": "Temperature Sensor",
+    "dataSource": {
+        "deviceId": "temp-sensor-01",
+        "field": "temperature"
+    },
+    "properties": {
+        "min": 0,
+        "max": 50,
+        "unit": "°C",
+        "thresholds": [
+            {"value": 20, "color": "#22c55e"},
+            {"value": 35, "color": "#f59e0b"},
+            {"value": 45, "color": "#ef4444"}
+        ]
+    },
+    "layout": {
+        "x": 0, "y": 0,
+        "width": 4, "height": 3
+    }
+}
+</code></pre>
+
+        <h4>Step 3: Configure Data Bindings</h4>
+        <p>Connect widgets to real-time device data:</p>
+        <ol>
+            <li>Select a widget on the canvas</li>
+            <li>Open the "Data" panel in the properties sidebar</li>
+            <li>Choose your data source (device and field)</li>
+            <li>Configure refresh intervals and filters</li>
+        </ol>
+
+        <h4>Step 4: Customize Styling</h4>
+        <p>Apply your brand colors and styling:</p>
+        <pre><code>// Custom theme configuration
+{
+    "theme": {
+        "primaryColor": "#2563eb",
+        "secondaryColor": "#64748b",
+        "backgroundColor": "#f8fafc",
+        "fontFamily": "Inter, sans-serif",
+        "borderRadius": "8px"
+    },
+    "layout": {
+        "gridSize": 12,
+        "rowHeight": 60,
+        "margin": [10, 10]
+    }
+}
+</code></pre>
+
+        <h3>Advanced Dashboard Features</h3>
+        <h4>Interactive Controls</h4>
+        <p>Add interactive elements to control your devices:</p>
+        <pre><code>// Button widget for device control
+{
+    "type": "button",
+    "title": "Toggle LED",
+    "action": {
+        "type": "command",
+        "deviceId": "esp32-001",
+        "command": "toggleLED",
+        "parameters": {}
+    },
+    "style": {
+        "variant": "primary",
+        "size": "large"
+    }
+}
+</code></pre>
+
+        <h2 id="ota-updates">Over-the-Air (OTA) Updates</h2>
+        <p>Keep your devices current with EdgeSync's OTA update system, currently supporting ESP32 platforms.</p>
+
+        <h3>Preparing Firmware for OTA</h3>
+        <h4>ESP32 Firmware Setup</h4>
+        <pre><code>// ESP32 Arduino code for OTA support
+#include &lt;WiFi.h&gt;
+#include &lt;HTTPUpdate.h&gt;
+#include &lt;WiFiClientSecure.h&gt;
+#include &lt;ArduinoJson.h&gt;
+
+const char* otaUrl = "https://ota.edgesync.com/v1/firmware";
+const char* deviceId = "esp32-001";
+const char* currentVersion = "1.0.0";
+
+void checkForUpdates() {
+    WiFiClientSecure client;
+    client.setInsecure(); // For development only
+    
+    HTTPClient http;
+    http.begin(client, otaUrl);
+    http.addHeader("Authorization", "Bearer " + String(deviceToken));
+    http.addHeader("Device-ID", deviceId);
+    http.addHeader("Current-Version", currentVersion);
+    
+    int httpCode = http.GET();
+    
+    if (httpCode == 200) {
+        String payload = http.getString();
+        DynamicJsonDocument doc(1024);
+        deserializeJson(doc, payload);
+        
+        if (doc["updateAvailable"]) {
+            String firmwareUrl = doc["firmwareUrl"];
+            performOTAUpdate(firmwareUrl);
+        }
+    }
+    
+    http.end();
+}
+
+void performOTAUpdate(String firmwareUrl) {
+    WiFiClientSecure client;
+    client.setInsecure();
+    
+    t_httpUpdate_return ret = httpUpdate.update(client, firmwareUrl);
+    
+    switch (ret) {
+        case HTTP_UPDATE_FAILED:
+            Serial.printf("Update failed: %s\n", httpUpdate.getLastErrorString().c_str());
+            break;
+        case HTTP_UPDATE_NO_UPDATES:
+            Serial.println("No updates available");
+            break;
+        case HTTP_UPDATE_OK:
+            Serial.println("Update successful, restarting...");
+            ESP.restart();
+            break;
+    }
+}
+</code></pre>
+
+        <h3>Managing OTA Updates</h3>
+        <h4>Upload Firmware</h4>
+        <ol>
+            <li>Navigate to "Device Management" → "OTA Updates"</li>
+            <li>Click "Upload New Firmware"</li>
+            <li>Select your compiled firmware file (.bin)</li>
+            <li>Specify version number and release notes</li>
+            <li>Choose target devices or device groups</li>
+        </ol>
+
+        <h4>Deployment Strategies</h4>
+        <ul>
+            <li><strong>Immediate:</strong> Deploy to all selected devices immediately</li>
+            <li><strong>Staged:</strong> Gradual rollout to device groups</li>
+            <li><strong>Scheduled:</strong> Deploy at a specific time</li>
+            <li><strong>Manual:</strong> Require manual approval per device</li>
+        </ul>
+
+        <h2 id="mqtt-setup">MQTT Broker Setup</h2>
+        <p>Configure EdgeSync's managed MQTT broker for secure device communication.</p>
+
+        <h3>Broker Configuration</h3>
+        <h4>Creating a Broker Instance</h4>
+        <ol>
+            <li>Go to "Infrastructure" → "MQTT Brokers"</li>
+            <li>Click "Create New Broker"</li>
+            <li>Choose your MQTT version (3.1, 3.1.1, or 5.0)</li>
+            <li>Configure security settings and ACLs</li>
+            <li>Deploy to your preferred AWS region</li>
+        </ol>
+
+        <h4>Security Configuration</h4>
+        <pre><code>// MQTT ACL configuration
+{
+    "acls": [
+        {
+            "username": "device-*",
+            "topic": "devices/+/telemetry",
+            "access": "write"
+        },
+        {
+            "username": "device-*",
+            "topic": "devices/+/commands",
+            "access": "read"
+        },
+        {
+            "username": "dashboard-*",
+            "topic": "devices/+/telemetry",
+            "access": "read"
+        }
+    ],
+    "authentication": {
+        "method": "certificate",
+        "requireClientCert": true
+    }
+}
+</code></pre>
+
+        <h3>Device Connection</h3>
+        <h4>ESP32 MQTT Client</h4>
+        <pre><code>// ESP32 MQTT connection with TLS
+#include &lt;WiFi.h&gt;
+#include &lt;PubSubClient.h&gt;
+#include &lt;WiFiClientSecure.h&gt;
+
+const char* mqttServer = "mqtt.edgesync.com";
+const int mqttPort = 8883;
+const char* deviceId = "esp32-001";
+
+// Load certificates (store in SPIFFS or embed)
+const char* caCert = "-----BEGIN CERTIFICATE-----...";
+const char* clientCert = "-----BEGIN CERTIFICATE-----...";
+const char* clientKey = "-----BEGIN PRIVATE KEY-----...";
+
+WiFiClientSecure espClient;
+PubSubClient client(espClient);
+
+void setup() {
+    // WiFi connection
+    WiFi.begin(ssid, password);
+    while (WiFi.status() != WL_CONNECTED) {
+        delay(1000);
+    }
+    
+    // Configure TLS
+    espClient.setCACert(caCert);
+    espClient.setCertificate(clientCert);
+    espClient.setPrivateKey(clientKey);
+    
+    client.setServer(mqttServer, mqttPort);
+    client.setCallback(messageCallback);
+    
+    connectMQTT();
+}
+
+void connectMQTT() {
+    while (!client.connected()) {
+        if (client.connect(deviceId)) {
+            Serial.println("MQTT connected");
+            client.subscribe("devices/" + String(deviceId) + "/commands");
+        } else {
+            delay(5000);
+        }
+    }
+}
+
+void publishTelemetry(float temperature, float humidity) {
+    DynamicJsonDocument doc(200);
+    doc["timestamp"] = WiFi.getTime();
+    doc["temperature"] = temperature;
+    doc["humidity"] = humidity;
+    
+    String payload;
+    serializeJson(doc, payload);
+    
+    client.publish("devices/" + String(deviceId) + "/telemetry", payload.c_str());
+}
+</code></pre>
+
+        <h2 id="analytics">Analytics & Monitoring</h2>
+        <p>Set up comprehensive analytics and monitoring for your IoT deployment.</p>
+
+        <h3>Real-time Analytics</h3>
+        <h4>Creating Analytics Rules</h4>
+        <p>Define rules to process incoming device data:</p>
+        <pre><code>// Analytics rule configuration
+{
+    "ruleName": "TemperatureAlert",
+    "description": "Alert when temperature exceeds threshold",
+    "sql": "SELECT temperature, deviceId, timestamp FROM 'devices/+/telemetry' WHERE temperature > 35",
+    "actions": [
+        {
+            "type": "sns",
+            "target": "arn:aws:sns:us-east-1:123456789:alerts",
+            "message": "High temperature alert: ${temperature}°C on device ${deviceId}"
+        },
+        {
+            "type": "webhook",
+            "url": "https://your-app.com/api/alerts",
+            "method": "POST",
+            "headers": {
+                "Authorization": "Bearer your-token"
+            }
+        }
+    ]
+}
+</code></pre>
+
+        <h3>Data Aggregation</h3>
+        <h4>Time-series Aggregation</h4>
+        <pre><code>// SQL query for hourly averages
+SELECT 
+    deviceId,
+    AVG(temperature) as avg_temp,
+    MAX(temperature) as max_temp,
+    MIN(temperature) as min_temp,
+    COUNT(*) as sample_count
+FROM telemetry_data 
+WHERE timestamp >= NOW() - INTERVAL 24 HOUR
+GROUP BY deviceId, DATE_TRUNC('hour', timestamp)
+ORDER BY timestamp DESC
+</code></pre>
+
+        <h2 id="data-logging">Advanced Data Logging</h2>
+        <p>Configure sophisticated data logging and storage strategies.</p>
+
+        <h3>Data Retention Policies</h3>
+        <pre><code>// Data retention configuration
+{
+    "retentionPolicies": [
+        {
+            "name": "raw_data",
+            "duration": "30d",
+            "resolution": "1m",
+            "fields": ["temperature", "humidity", "pressure"]
+        },
+        {
+            "name": "hourly_aggregates",
+            "duration": "1y",
+            "resolution": "1h",
+            "aggregation": "avg"
+        },
+        {
+            "name": "daily_summaries",
+            "duration": "5y",
+            "resolution": "1d",
+            "aggregation": "avg"
+        }
+    ]
+}
+</code></pre>
+
+        <h2 id="workflows">Automation Workflows</h2>
+        <p>Create intelligent automation workflows using EdgeSync's natural language processing.</p>
+
+        <h3>Workflow Configuration</h3>
+        <pre><code>// Workflow definition
+{
+    "workflowName": "SmartThermostat",
+    "description": "Automatically adjust HVAC based on temperature and occupancy",
+    "triggers": [
+        {
+            "type": "data",
+            "condition": "temperature > 25 AND occupancy = true"
+        },
+        {
+            "type": "schedule",
+            "cron": "0 8 * * MON-FRI"
+        }
+    ],
+    "actions": [
+        {
+            "type": "device_command",
+            "deviceId": "hvac-001",
+            "command": "setTemperature",
+            "parameters": {
+                "temperature": 22
+            }
+        },
+        {
+            "type": "notification",
+            "message": "HVAC adjusted to 22°C due to high temperature"
+        }
+    ]
+}
+</code></pre>
+
+        <div class="alert success">
+            <strong>Next Steps:</strong> Explore our <a href="{% url 'docs_best_practices' %}">Best Practices</a> guide to optimize your IoT deployment for production use.
+        </div>
+    </main>
+
+    <!-- Table of Contents -->
+    <aside class="docs-toc">
+        <h4>On This Page</h4>
+        <ul class="toc-list">
+            <!-- TOC will be generated by JavaScript -->
+        </ul>
+    </aside>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/docs.js' %}"></script>
+{% endblock %}
