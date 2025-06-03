@@ -9,7 +9,7 @@ from .serializers import SensorDataSerializer
 
 def dashboard(request):
     """Render the main dashboard page"""
-    return render(request, 'sensors/dashboard.html')
+    return render(request, 'dashboard.html')
 
 class SensorDataListView(generics.ListAPIView):
     """API endpoint for retrieving sensor data with filtering and pagination"""

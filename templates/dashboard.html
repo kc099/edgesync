@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP32 Sensor Dashboard</title>
+    {% load static %}
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="{% static 'css/dashboard.css' %}">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🌡️ ESP32 Sensor Dashboard</h1>
+            <div class="status-indicator">
+                <div class="status-dot" id="connectionStatus"></div>
+                <span id="connectionText">Connecting...</span>
+            </div>
+        </div>
+
+        <div class="controls">
+            <div class="control-group">
+                <label for="deviceFilter">Filter by Device:</label>
+                <select id="deviceFilter">
+                    <option value="">All Devices</option>
+                </select>
+            </div>
+            <div class="control-group">
+                <label for="sensorFilter">Filter by Sensor Type:</label>
+                <select id="sensorFilter">
+                    <option value="">All Sensors</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="dashboard-grid">
+            <div class="card chart-container">
+                <div class="card-header">
+                    <h3 class="card-title">📊 Real-time Sensor Data</h3>
+                </div>
+                <canvas id="sensorChart"></canvas>
+            </div>
+        </div>
+
+        <div class="dashboard-grid" id="sensorCards">
+            <!-- Sensor cards will be dynamically added here -->
+        </div>
+
+        <div class="card data-log">
+            <div class="card-header">
+                <h3 class="card-title">📋 Data Log</h3>
+                <span id="logCount">0 entries</span>
+            </div>
+            <div id="dataLog">
+                <!-- Log entries will be added here -->
+            </div>
+        </div>
+    </div>
+
+    <script src="{% static 'js/dashboard.js' %}"></script>
+</body>
+</html> 
