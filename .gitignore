@@ -54,3 +54,6 @@ htmlcov/
 .cache
 coverage.xml
 *.cover 
+export_sql.py
+*.csv
+test-auth.py

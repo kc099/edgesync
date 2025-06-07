@@ -13,6 +13,10 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 from pathlib import Path
 import os
 from dotenv import load_dotenv
+import pymysql
+
+# Use PyMySQL as MySQL adapter
+pymysql.install_as_MySQLdb()
 
 # Load environment variables from .env file
 load_dotenv()
@@ -46,6 +50,7 @@ INSTALLED_APPS = [
     "channels",
     "rest_framework",
     "django_filters",
+    "user",
     "sensors",
     "allauth",
     "allauth.account",
@@ -92,8 +97,22 @@ DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
         "NAME": BASE_DIR / "db.sqlite3",
+    },
+    "mosquitto": {
+        "ENGINE": "django.db.backends.mysql",
+        "NAME": os.getenv('MOSQUITTO_DB_NAME', 'mosquittoauth'),
+        "USER": os.getenv('MOSQUITTO_DB_USER', 'kc099'),
+        "PASSWORD": os.getenv('MOSQUITTO_DB_PASSWORD', 'Roboworks23!'),
+        "HOST": os.getenv('MOSQUITTO_DB_HOST', '68.178.150.182'),
+        "PORT": os.getenv('MOSQUITTO_DB_PORT', '3306'),
+        "OPTIONS": {
+            "charset": "utf8mb4",
+        },
     }
 }
+
+# Database routing
+DATABASE_ROUTERS = ['edgesync.db_router.DatabaseRouter']
 
 
 # Password validation

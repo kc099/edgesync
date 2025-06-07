@@ -1,4 +1,5 @@
 from django.db import models
+from django.contrib.auth.models import User
 from django.utils import timezone
 import json
 
@@ -38,3 +39,27 @@ class SensorData(models.Model):
             )
         except (ValueError, TypeError, json.JSONDecodeError) as e:
             raise ValueError(f"Invalid sensor data format: {e}")
+
+
+class Device(models.Model):
+    """Model to store IoT device information"""
+    
+    device_id = models.CharField(max_length=100, unique=True, help_text="Unique device identifier")
+    device_name = models.CharField(max_length=200, help_text="Human readable device name")
+    user = models.ForeignKey(User, on_delete=models.CASCADE, help_text="Device owner")
+    tenant_id = models.CharField(max_length=100, help_text="Tenant identifier")
+    device_type = models.CharField(max_length=50, help_text="Type of device")
+    is_active = models.BooleanField(default=True, help_text="Whether device is active")
+    created_at = models.DateTimeField(default=timezone.now)
+    
+    class Meta:
+        db_table = 'devices'
+        indexes = [
+            models.Index(fields=['user', 'tenant_id']),
+            models.Index(fields=['device_id']),
+        ]
+    
+    def __str__(self):
+        return f"{self.device_name} ({self.device_id})"
+
+
