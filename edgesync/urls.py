@@ -32,6 +32,7 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('', home_view, name='landing'),
     path('accounts/', include('allauth.urls')),
+    path('api/', include('user.urls')),  # Add user authentication APIs
     path('', include('sensors.urls')),  # Include sensors URLs at root level
     
     # Documentation URLs
