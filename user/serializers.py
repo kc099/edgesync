@@ -43,24 +43,28 @@ class LoginSerializer(serializers.Serializer):
 
 
 class SignupSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True, style={'input_type': 'password'})
-    password_confirm = serializers.CharField(write_only=True, style={'input_type': 'password'})
+    password = serializers.CharField(write_only=True, min_length=6)
+    password_confirm = serializers.CharField(write_only=True, required=False)
 
     class Meta:
         model = User
         fields = ('username', 'email', 'password', 'password_confirm', 'first_name', 'last_name')
 
-    def validate(self, data):
-        if data['password'] != data['password_confirm']:
-            raise serializers.ValidationError("Passwords don't match.")
+    def validate(self, attrs):
+        # Add password_confirm if not provided (for encrypted requests)
+        if 'password_confirm' not in attrs:
+            attrs['password_confirm'] = attrs['password']
         
-        if User.objects.filter(email=data['email']).exists():
+        if attrs['password'] != attrs['password_confirm']:
+            raise serializers.ValidationError("Passwords don't match")
+        
+        if User.objects.filter(email=attrs['email']).exists():
             raise serializers.ValidationError("User with this email already exists.")
         
-        if User.objects.filter(username=data['username']).exists():
+        if User.objects.filter(username=attrs['username']).exists():
             raise serializers.ValidationError("User with this username already exists.")
         
-        return data
+        return attrs
 
     def create(self, validated_data):
         validated_data.pop('password_confirm')

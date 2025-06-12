@@ -146,6 +146,54 @@ class EncryptionManager:
         except Exception as e:
             raise ValueError(f"Form data decryption failed: {e}")
 
+    def decrypt_request_data(self, encrypted_data):
+        """
+        Decrypt request data from frontend
+        Expected format: {'data': {...}, 'key': 'base64_encrypted_key', 'iv': 'hex_iv'}
+        """
+        try:
+            # Extract components
+            encrypted_form_data = encrypted_data.get('data', {})
+            encrypted_aes_key_b64 = encrypted_data.get('key')
+            iv_hex = encrypted_data.get('iv')
+            
+            if not all([encrypted_aes_key_b64, iv_hex]):
+                return None
+            
+            # Decrypt AES key with RSA private key
+            encrypted_aes_key = base64.b64decode(encrypted_aes_key_b64)
+            aes_key_hex = self._private_key.decrypt(
+                encrypted_aes_key,
+                padding.OAEP(
+                    mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                    algorithm=hashes.SHA256(),
+                    label=None
+                )
+            ).decode('utf-8')
+            
+            # Convert hex key back to bytes
+            aes_key = bytes.fromhex(aes_key_hex)
+            iv = bytes.fromhex(iv_hex)
+            
+            # Decrypt each encrypted field
+            decrypted_data = {}
+            for field, value in encrypted_form_data.items():
+                if isinstance(value, dict) and value.get('encrypted'):
+                    # Decrypt this field
+                    encrypted_value_b64 = value.get('data')
+                    if encrypted_value_b64:
+                        decrypted_value = self.decrypt_aes(encrypted_value_b64, aes_key_hex, iv_hex)
+                        decrypted_data[field] = decrypted_value
+                else:
+                    # Plain field
+                    decrypted_data[field] = value
+            
+            return decrypted_data
+            
+        except Exception as e:
+            print(f"Decryption error: {e}")
+            return None
+
 
 # Global instance
 encryption_manager = EncryptionManager() 

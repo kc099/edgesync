@@ -43,111 +43,97 @@ def get_public_key(request):
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
-@csrf_exempt
 def login_view(request):
-    """Secure login endpoint that handles encrypted data"""
+    """Login user with encrypted credentials only"""
     try:
-        data = json.loads(request.body) if hasattr(request, 'body') else request.data
+        data = request.data
         
-        # Check if data is encrypted
-        if 'key' in data and 'iv' in data:
-            try:
-                # Decrypt the form data
-                decrypted_data = encryption_manager.decrypt_form_data(data)
-                email = decrypted_data.get('email')
-                password = decrypted_data.get('password')
-            except Exception as decrypt_error:
-                # Fallback to plain data if decryption fails
-                print(f"Decryption failed, using plain data: {decrypt_error}")
-                email = data.get('data', {}).get('email')
-                password = data.get('data', {}).get('password')
-        else:
-            # Plain data (for development/testing)
-            email = data.get('email')
-            password = data.get('password')
-        
-        if not email or not password:
+        # Check if this is encrypted data
+        if 'data' not in data or 'key' not in data or 'iv' not in data:
             return Response({
-                'error': 'Email and password are required',
+                'error': 'Encrypted authentication required. Please use a secure client.',
                 'status': 'error'
             }, status=status.HTTP_400_BAD_REQUEST)
         
-        # Create serializer with decrypted/plain data
-        serializer_data = {'email': email, 'password': password}
-        serializer = LoginSerializer(data=serializer_data)
-        
-        if serializer.is_valid():
-            user = serializer.validated_data['user']
-            tokens = get_tokens_for_user(user)
-            
+        # Decrypt the data
+        decrypted_data = encryption_manager.decrypt_request_data(data)
+        if not decrypted_data:
             return Response({
-                'token': tokens['access'],
-                'refresh': tokens['refresh'],
-                'user': UserSerializer(user).data,
-                'status': 'success'
-            })
+                'error': 'Failed to decrypt authentication data',
+                'status': 'error'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Validate using serializer
+        serializer = LoginSerializer(data=decrypted_data)
+        if serializer.is_valid():
+            email = serializer.validated_data['email']
+            password = serializer.validated_data['password']
+            
+            # Authenticate user
+            user = authenticate(username=email, password=password)
+            if user:
+                # Generate JWT tokens
+                refresh = RefreshToken.for_user(user)
+                access_token = refresh.access_token
+                
+                return Response({
+                    'token': str(access_token),
+                    'refresh': str(refresh),
+                    'user': UserSerializer(user).data,
+                    'status': 'success'
+                }, status=status.HTTP_200_OK)
+            else:
+                return Response({
+                    'error': {'non_field_errors': ['Invalid email or password.']},
+                    'status': 'error'
+                }, status=status.HTTP_400_BAD_REQUEST)
         else:
             return Response({
                 'error': serializer.errors,
                 'status': 'error'
             }, status=status.HTTP_400_BAD_REQUEST)
             
-    except json.JSONDecodeError:
-        return Response({
-            'error': 'Invalid JSON data',
-            'status': 'error'
-        }, status=status.HTTP_400_BAD_REQUEST)
     except Exception as e:
         return Response({
-            'error': str(e),
+            'error': 'Authentication failed',
             'status': 'error'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
-@csrf_exempt
 def signup_view(request):
-    """Secure signup endpoint that handles encrypted data"""
+    """Register new user with encrypted credentials only"""
     try:
-        data = json.loads(request.body) if hasattr(request, 'body') else request.data
+        data = request.data
         
-        # Check if data is encrypted
-        if 'key' in data and 'iv' in data:
-            try:
-                # Decrypt the form data
-                decrypted_data = encryption_manager.decrypt_form_data(data)
-            except Exception as decrypt_error:
-                # Fallback to plain data if decryption fails
-                print(f"Decryption failed, using plain data: {decrypt_error}")
-                decrypted_data = data.get('data', {})
-        else:
-            # Plain data (for development/testing)
-            decrypted_data = data
-        
-        # Validate required fields
-        required_fields = ['username', 'email', 'password']
-        missing_fields = [field for field in required_fields if not decrypted_data.get(field)]
-        
-        if missing_fields:
+        # Check if this is encrypted data
+        if 'data' not in data or 'key' not in data or 'iv' not in data:
             return Response({
-                'error': f'Missing required fields: {", ".join(missing_fields)}',
+                'error': 'Encrypted authentication required. Please use a secure client.',
                 'status': 'error'
             }, status=status.HTTP_400_BAD_REQUEST)
         
-        # Add password confirmation if not provided
-        if 'password_confirm' not in decrypted_data:
-            decrypted_data['password_confirm'] = decrypted_data['password']
+        # Decrypt the data
+        decrypted_data = encryption_manager.decrypt_request_data(data)
+        if not decrypted_data:
+            return Response({
+                'error': 'Failed to decrypt registration data',
+                'status': 'error'
+            }, status=status.HTTP_400_BAD_REQUEST)
         
+        # Validate using serializer
         serializer = SignupSerializer(data=decrypted_data)
-        
         if serializer.is_valid():
             user = serializer.save()
-            tokens = get_tokens_for_user(user)
+            
+            # Generate JWT tokens
+            refresh = RefreshToken.for_user(user)
+            access_token = refresh.access_token
             
             return Response({
-                'token': tokens['access'],
-                'refresh': tokens['refresh'],
+                'token': str(access_token),
+                'refresh': str(refresh),
                 'user': UserSerializer(user).data,
                 'status': 'success'
             }, status=status.HTTP_201_CREATED)
@@ -157,14 +143,9 @@ def signup_view(request):
                 'status': 'error'
             }, status=status.HTTP_400_BAD_REQUEST)
             
-    except json.JSONDecodeError:
-        return Response({
-            'error': 'Invalid JSON data',
-            'status': 'error'
-        }, status=status.HTTP_400_BAD_REQUEST)
     except Exception as e:
         return Response({
-            'error': str(e),
+            'error': 'Registration failed',
             'status': 'error'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
