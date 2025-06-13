@@ -56,6 +56,7 @@ INSTALLED_APPS = [
     "django_filters",
     "user",
     "sensors",
+    "flows",
     "allauth",
     "allauth.account",
     "allauth.socialaccount",
