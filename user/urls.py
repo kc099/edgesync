@@ -3,10 +3,19 @@ from . import views
 from rest_framework_simplejwt.views import TokenRefreshView
 
 urlpatterns = [
-    path('public-key/', views.get_public_key, name='get_public_key'),
+    # Authentication endpoints
+    path('public-key/', views.public_key_view, name='public_key'),
     path('login/', views.login_view, name='login'),
     path('signup/', views.signup_view, name='signup'),
     path('logout/', views.logout_view, name='logout'),
     path('profile/', views.profile_view, name='profile'),
     path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    
+    # Organization endpoints
+    path('organizations/', views.organizations_view, name='organizations'),
+    path('organizations/<int:org_id>/', views.organization_detail_view, name='organization_detail'),
+    
+    # Dashboard template endpoints
+    path('dashboard-templates/', views.dashboard_templates_view, name='dashboard_templates'),
+    path('dashboard-templates/<int:template_id>/', views.dashboard_template_detail_view, name='dashboard_template_detail'),
 ] 

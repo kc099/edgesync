@@ -47,6 +47,13 @@ class Device(models.Model):
     device_id = models.CharField(max_length=100, unique=True, help_text="Unique device identifier")
     device_name = models.CharField(max_length=200, help_text="Human readable device name")
     user = models.ForeignKey(User, on_delete=models.CASCADE, help_text="Device owner")
+    organization = models.ForeignKey(
+        'user.Organization', 
+        on_delete=models.CASCADE, 
+        help_text="Organization this device belongs to",
+        null=True,
+        blank=True
+    )
     tenant_id = models.CharField(max_length=100, help_text="Tenant identifier")
     device_type = models.CharField(max_length=50, help_text="Type of device")
     is_active = models.BooleanField(default=True, help_text="Whether device is active")
@@ -57,6 +64,7 @@ class Device(models.Model):
         indexes = [
             models.Index(fields=['user', 'tenant_id']),
             models.Index(fields=['device_id']),
+            models.Index(fields=['organization', '-created_at']),
         ]
     
     def __str__(self):

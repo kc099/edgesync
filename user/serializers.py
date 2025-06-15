@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
 from django.contrib.auth import authenticate
-from .models import UserProfile
+from .models import UserProfile, Organization, OrganizationMember, DashboardTemplate, TemplatePermission
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -80,4 +80,114 @@ class SignupSerializer(serializers.ModelSerializer):
             defaults={'subscription_type': 'free'}
         )
         
-        return user 
+        return user
+
+
+class OrganizationSerializer(serializers.ModelSerializer):
+    owner = UserSerializer(read_only=True)
+    admin_count = serializers.SerializerMethodField()
+    user_count = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Organization
+        fields = ('id', 'name', 'description', 'owner', 'slug', 'is_active', 
+                 'created_at', 'updated_at', 'admin_count', 'user_count')
+        read_only_fields = ('owner', 'created_at', 'updated_at')
+    
+    def get_admin_count(self, obj):
+        return obj.get_admin_count()
+    
+    def get_user_count(self, obj):
+        return obj.get_user_count()
+
+
+class OrganizationMemberSerializer(serializers.ModelSerializer):
+    user = UserSerializer(read_only=True)
+    organization = OrganizationSerializer(read_only=True)
+    invited_by = UserSerializer(read_only=True)
+    
+    class Meta:
+        model = OrganizationMember
+        fields = ('id', 'organization', 'user', 'role', 'joined_at', 'invited_by')
+        read_only_fields = ('joined_at', 'invited_by')
+
+
+class DashboardTemplateSerializer(serializers.ModelSerializer):
+    creator = UserSerializer(read_only=True)
+    organization = OrganizationSerializer(read_only=True)
+    admin_count = serializers.SerializerMethodField()
+    user_count = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = DashboardTemplate
+        fields = ('id', 'name', 'description', 'organization', 'creator', 
+                 'layout', 'widgets', 'datasources', 'update_frequency', 
+                 'connection_timeout', 'flow_config', 'is_active', 
+                 'created_at', 'updated_at', 'admin_count', 'user_count')
+        read_only_fields = ('creator', 'created_at', 'updated_at')
+    
+    def get_admin_count(self, obj):
+        return obj.get_admin_count()
+    
+    def get_user_count(self, obj):
+        return obj.get_user_count()
+
+
+class TemplatePermissionSerializer(serializers.ModelSerializer):
+    user = UserSerializer(read_only=True)
+    template = DashboardTemplateSerializer(read_only=True)
+    granted_by = UserSerializer(read_only=True)
+    
+    class Meta:
+        model = TemplatePermission
+        fields = ('id', 'template', 'user', 'permission_type', 'granted_by', 'granted_at')
+        read_only_fields = ('granted_by', 'granted_at')
+
+
+class CreateOrganizationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Organization
+        fields = ('name', 'description', 'slug')
+    
+    def create(self, validated_data):
+        # Set the owner to the current user
+        validated_data['owner'] = self.context['request'].user
+        organization = Organization.objects.create(**validated_data)
+        
+        # Automatically add the owner as an admin member
+        OrganizationMember.objects.create(
+            organization=organization,
+            user=organization.owner,
+            role='admin'
+        )
+        
+        return organization
+
+
+class CreateDashboardTemplateSerializer(serializers.ModelSerializer):
+    organization_id = serializers.IntegerField(write_only=True)
+    
+    class Meta:
+        model = DashboardTemplate
+        fields = ('name', 'description', 'organization_id', 'layout', 'widgets', 
+                 'datasources', 'update_frequency', 'connection_timeout', 'flow_config')
+    
+    def validate_organization_id(self, value):
+        try:
+            organization = Organization.objects.get(id=value)
+            # Check if user has admin access to this organization
+            user = self.context['request'].user
+            if not organization.members.filter(user=user, role='admin').exists():
+                raise serializers.ValidationError("You don't have admin access to this organization.")
+            return value
+        except Organization.DoesNotExist:
+            raise serializers.ValidationError("Organization not found.")
+    
+    def create(self, validated_data):
+        organization_id = validated_data.pop('organization_id')
+        organization = Organization.objects.get(id=organization_id)
+        
+        validated_data['organization'] = organization
+        validated_data['creator'] = self.context['request'].user
+        
+        return DashboardTemplate.objects.create(**validated_data) 

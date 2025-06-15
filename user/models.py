@@ -41,6 +41,137 @@ class UserProfile(models.Model):
         return current_device_count < self.device_limit
 
 
+class Organization(models.Model):
+    """Organization model for multi-tenant support"""
+    
+    name = models.CharField(max_length=200, help_text="Organization name")
+    description = models.TextField(blank=True, help_text="Organization description")
+    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='owned_organizations', help_text="Organization owner/creator")
+    slug = models.SlugField(max_length=100, unique=True, help_text="URL-friendly organization identifier")
+    is_active = models.BooleanField(default=True, help_text="Whether organization is active")
+    created_at = models.DateTimeField(default=timezone.now)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        db_table = 'organizations'
+        ordering = ['name']
+    
+    def __str__(self):
+        return self.name
+    
+    def get_admin_count(self):
+        """Get number of admin members"""
+        return self.members.filter(role='admin').count()
+    
+    def get_user_count(self):
+        """Get number of user members"""
+        return self.members.filter(role='user').count()
+
+
+class OrganizationMember(models.Model):
+    """Organization membership model"""
+    
+    ROLE_CHOICES = [
+        ('admin', 'Admin'),
+        ('user', 'User'),
+    ]
+    
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='members')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='organization_memberships')
+    role = models.CharField(max_length=10, choices=ROLE_CHOICES, default='user')
+    joined_at = models.DateTimeField(default=timezone.now)
+    invited_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='sent_invitations')
+    
+    class Meta:
+        db_table = 'organization_members'
+        unique_together = ['organization', 'user']
+        ordering = ['joined_at']
+    
+    def __str__(self):
+        return f"{self.user.username} - {self.organization.name} ({self.role})"
+
+
+class DashboardTemplate(models.Model):
+    """Dashboard template model for organizations"""
+    
+    CHART_TYPES = [
+        ('time_series', 'Time Series'),
+        ('bar_chart', 'Bar Chart'),
+        ('gauge', 'Gauge'),
+        ('stat_panel', 'Stat Panel'),
+        ('pie_chart', 'Pie Chart'),
+        ('table', 'Table'),
+        ('histogram', 'Histogram'),
+        ('xy_chart', 'XY Chart'),
+        ('trend_chart', 'Trend Chart'),
+    ]
+    
+    DATASOURCE_TYPES = [
+        ('mysql', 'MySQL'),
+        ('postgresql', 'PostgreSQL'),
+        ('influxdb', 'InfluxDB'),
+    ]
+    
+    name = models.CharField(max_length=200, help_text="Template name")
+    description = models.TextField(blank=True, help_text="Template description")
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='dashboard_templates')
+    creator = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_templates')
+    
+    # Dashboard configuration
+    layout = models.JSONField(default=dict, help_text="Dashboard layout configuration")
+    widgets = models.JSONField(default=list, help_text="Dashboard widgets configuration")
+    datasources = models.JSONField(default=list, help_text="Connected datasources")
+    
+    # Template settings
+    update_frequency = models.IntegerField(default=30, help_text="Update frequency in seconds")
+    connection_timeout = models.IntegerField(default=10, help_text="Database connection timeout in seconds")
+    
+    # Flow configuration
+    flow_config = models.JSONField(default=dict, help_text="Associated flow configuration")
+    
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(default=timezone.now)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        db_table = 'dashboard_templates'
+        ordering = ['-updated_at']
+    
+    def __str__(self):
+        return f"{self.name} ({self.organization.name})"
+    
+    def get_admin_count(self):
+        """Get number of admin permissions"""
+        return self.permissions.filter(permission_type='admin').count()
+    
+    def get_user_count(self):
+        """Get number of user permissions"""
+        return self.permissions.filter(permission_type='user').count()
+
+
+class TemplatePermission(models.Model):
+    """Template permission model for sharing templates"""
+    
+    PERMISSION_TYPES = [
+        ('admin', 'Admin'),  # Can edit template, flows, and manage users
+        ('user', 'User'),    # Can only view template content
+    ]
+    
+    template = models.ForeignKey(DashboardTemplate, on_delete=models.CASCADE, related_name='permissions')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='template_permissions')
+    permission_type = models.CharField(max_length=10, choices=PERMISSION_TYPES, default='user')
+    granted_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='granted_permissions')
+    granted_at = models.DateTimeField(default=timezone.now)
+    
+    class Meta:
+        db_table = 'template_permissions'
+        unique_together = ['template', 'user']
+        ordering = ['granted_at']
+    
+    def __str__(self):
+        return f"{self.user.username} - {self.template.name} ({self.permission_type})"
+
+
 class MosquittoUser(models.Model):
     """Model for Mosquitto MQTT users - matches mosquitto_users table"""
     
@@ -71,29 +202,28 @@ class MosquittoUser(models.Model):
 class MosquittoACL(models.Model):
     """Model for Mosquitto ACLs - matches mosquitto_acls table"""
     
-    READ = 1
-    WRITE = 2
-    READWRITE = 3
-    SUBSCRIBE = 4
+    ACCESS_READ = 1
+    ACCESS_WRITE = 2
+    ACCESS_READWRITE = 3
+    ACCESS_SUBSCRIBE = 4
     
-    RW_CHOICES = [
-        (READ, 'Read'),
-        (WRITE, 'Write'), 
-        (READWRITE, 'Read/Write'),
-        (SUBSCRIBE, 'Subscribe'),
+    ACCESS_CHOICES = [
+        (ACCESS_READ, 'Read'),
+        (ACCESS_WRITE, 'Write'),
+        (ACCESS_READWRITE, 'Read/Write'),
+        (ACCESS_SUBSCRIBE, 'Subscribe'),
     ]
     
     username = models.CharField(max_length=100)
-    topic = models.TextField(help_text="MQTT topic pattern")
-    rw = models.IntegerField(choices=RW_CHOICES, help_text="Read/Write permissions")
+    topic = models.TextField()
+    access = models.IntegerField(choices=ACCESS_CHOICES)
     
     class Meta:
         db_table = 'mosquitto_acls'
         managed = False  # Don't let Django manage this table
-        unique_together = ['username', 'topic', 'rw']
     
     def __str__(self):
-        return f"{self.username} - {self.topic} ({self.get_rw_display()})"
+        return f"{self.username} - {self.topic} ({self.get_access_display()})"
 
 
 class MosquittoSuperuser(models.Model):
