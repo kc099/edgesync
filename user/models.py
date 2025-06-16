@@ -4,6 +4,7 @@ from django.utils import timezone
 import hashlib
 import base64
 import os
+import uuid
 
 
 class UserProfile(models.Model):
@@ -93,6 +94,9 @@ class OrganizationMember(models.Model):
 
 class DashboardTemplate(models.Model):
     """Dashboard template model for organizations"""
+    
+    # Unique shareable identifier
+    uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     
     CHART_TYPES = [
         ('time_series', 'Time Series'),

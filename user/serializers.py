@@ -120,7 +120,7 @@ class DashboardTemplateSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = DashboardTemplate
-        fields = ('id', 'name', 'description', 'organization', 'creator', 
+        fields = ('uuid', 'id', 'name', 'description', 'organization', 'creator', 
                  'layout', 'widgets', 'datasources', 'update_frequency', 
                  'connection_timeout', 'flow_config', 'is_active', 
                  'created_at', 'updated_at', 'admin_count', 'user_count')

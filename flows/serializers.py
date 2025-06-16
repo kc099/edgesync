@@ -4,7 +4,7 @@ from .models import FlowDiagram, FlowExecution, NodeExecution
 class FlowDiagramSerializer(serializers.ModelSerializer):
     class Meta:
         model = FlowDiagram
-        fields = ['id', 'name', 'description', 'nodes', 'edges', 'metadata', 
+        fields = ['uuid', 'id', 'name', 'description', 'nodes', 'edges', 'metadata', 
                  'is_active', 'created_at', 'updated_at', 'version', 'tags']
         read_only_fields = ['created_at', 'updated_at']
 

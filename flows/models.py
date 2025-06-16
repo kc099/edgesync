@@ -1,8 +1,10 @@
 from django.db import models
 from django.contrib.auth.models import User
 import json
+import uuid
 
 class FlowDiagram(models.Model):
+    uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     id = models.AutoField(primary_key=True)
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True)

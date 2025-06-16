@@ -327,10 +327,11 @@ def dashboard_templates_view(request):
 
 @api_view(['GET', 'PUT', 'DELETE'])
 @permission_classes([IsAuthenticated])
-def dashboard_template_detail_view(request, template_id):
+def dashboard_template_detail_view(request, template_uuid):
     """Get, update, or delete specific dashboard template"""
     try:
-        template = DashboardTemplate.objects.get(id=template_id)
+        # Fetch by UUID for shareable identifiers
+        template = DashboardTemplate.objects.get(uuid=template_uuid)
         
         # Check user permissions
         has_admin_access = (

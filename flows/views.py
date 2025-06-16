@@ -12,6 +12,7 @@ from .serializers import FlowDiagramSerializer, FlowExecutionSerializer
 class FlowDiagramViewSet(viewsets.ModelViewSet):
     serializer_class = FlowDiagramSerializer
     permission_classes = [IsAuthenticated]
+    lookup_field = 'uuid'
 
     def get_queryset(self):
         return FlowDiagram.objects.filter(owner=self.request.user)
