@@ -2,14 +2,14 @@ from django.shortcuts import render
 from django.http import JsonResponse
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.csrf import csrf_exempt
-from rest_framework import generics, filters, status
+from rest_framework import generics, filters, status, viewsets
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
-from .models import SensorData, Device
+from .models import SensorData, Device, MqttCluster, MqttTopic, MqttActivity
 from user.models import MosquittoUser, MosquittoACL, MosquittoSuperuser, UserProfile, DeviceHistory
-from .serializers import SensorDataSerializer
+from .serializers import SensorDataSerializer, MqttClusterSerializer, MqttClusterListSerializer, MqttTopicSerializer, MqttActivitySerializer
 import json
 import secrets
 import string
@@ -430,6 +430,25 @@ def set_mqtt_password(request):
             profile.mqtt_password_set = True
             profile.save()
             
+            # Create or update hosted cluster entry
+            hosted_cluster, created = MqttCluster.objects.get_or_create(
+                user=request.user,
+                cluster_type='hosted',
+                defaults={
+                    'name': 'Free #1',
+                    'host': '13.203.165.247',
+                    'port': 1883,
+                    'username': username,
+                    'password': password,
+                }
+            )
+            
+            if not created:
+                # Update existing hosted cluster with new credentials
+                hosted_cluster.username = username
+                hosted_cluster.password = password
+                hosted_cluster.save()
+            
         except Exception as e:
             print(f"Error creating MQTT user: {e}")
             return Response({
@@ -452,68 +471,7 @@ def set_mqtt_password(request):
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def user_mqtt_info(request):
-    """API endpoint for getting user's MQTT connection information"""
-    
-    try:
-        # Get or create user profile
-        try:
-            profile = request.user.profile
-        except UserProfile.DoesNotExist:
-            profile = UserProfile.objects.create(user=request.user)
-        
-        # Get MQTT username (could be None if not set yet)
-        mqtt_username = profile.mqtt_username if profile.mqtt_username else None
-        has_password = False
-        
-        # Check mosquitto database for actual credentials (this is the source of truth)
-        if mqtt_username:
-            try:
-                from django.db import connections
-                cursor = connections['mosquitto'].cursor()
-                cursor.execute("SELECT COUNT(*) FROM mosquitto_users WHERE username = %s", [mqtt_username])
-                has_password = cursor.fetchone()[0] > 0
-            except Exception as e:
-                print(f"Error checking MQTT user: {e}")
-                has_password = False
-        
-        # Get user's devices for topic examples
-        devices = Device.objects.filter(user=request.user)[:3]
-        topic_examples = []
-        
-        for device in devices:
-            topic_examples.append({
-                'device': device.device_name,
-                'topics': [
-                    f"iot/{device.tenant_id}/{device.device_id}/data",
-                    f"iot/{device.tenant_id}/{device.device_id}/commands",
-                    f"iot/{device.tenant_id}/{device.device_id}/status"
-                ]
-            })
-        
-        return Response({
-            'username': mqtt_username,
-            'hasPassword': has_password,
-            'passwordSet': profile.mqtt_password_set,
-            'connected': profile.mqtt_connected,
-            'subscriptionType': profile.subscription_type,
-            'deviceLimit': profile.device_limit,
-            'deviceCount': Device.objects.filter(user=request.user).count(),
-            'broker': {
-                'host': '13.203.165.247',
-                'port': 1883,
-                'websocketPort': 1884
-            },
-            'topicExamples': topic_examples
-        })
-        
-    except Exception as e:
-        print(f"Error in user_mqtt_info: {e}")
-        return Response({
-            'error': 'Failed to load MQTT information'
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 @api_view(['GET', 'POST'])
 @permission_classes([IsAuthenticated])
@@ -628,9 +586,7 @@ def acl_detail(request, acl_id):
 
 # MQTT Cluster Management Views
 
-from rest_framework import viewsets
-from .models import MqttCluster, MqttTopic, MqttActivity
-from .serializers import MqttClusterSerializer, MqttClusterListSerializer, MqttTopicSerializer, MqttActivitySerializer
+
 
 class MqttClusterViewSet(viewsets.ModelViewSet):
     """ViewSet for managing MQTT clusters"""
@@ -651,210 +607,241 @@ class MqttClusterViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         """Set the user when creating a cluster"""
         serializer.save(user=self.request.user)
+    
+    def destroy(self, request, *args, **kwargs):
+        """Custom delete logic for hosted clusters"""
+        cluster = self.get_object()
+        
+        # If it's a hosted cluster, also clean up mosquitto credentials
+        if cluster.cluster_type == 'hosted':
+            try:
+                # Get user's MQTT username from profile
+                profile = request.user.profile
+                mqtt_username = profile.mqtt_username
+                
+                print(f"Deleting hosted cluster for user: {request.user.username}, mqtt_username: {mqtt_username}")
+                
+                if mqtt_username:
+                    from django.db import connections
+                    cursor = connections['mosquitto'].cursor()
+                    
+                    # First get the user_id from users table
+                    cursor.execute("SELECT id FROM users WHERE username = %s", [mqtt_username])
+                    user_result = cursor.fetchone()
+                    
+                    if user_result:
+                        user_id = user_result[0]
+                        print(f"Found user_id {user_id} for username {mqtt_username}")
+                        
+                        # Delete all ACLs for this user (from real table, not view)
+                        cursor.execute("DELETE FROM user_acls WHERE user_id = %s", [user_id])
+                        acl_count = cursor.rowcount
+                        print(f"Deleted {acl_count} ACL entries for user_id {user_id}")
+                        
+                        # Delete user credentials (from real table, not view)
+                        cursor.execute("DELETE FROM users WHERE id = %s", [user_id])
+                        user_count = cursor.rowcount
+                        print(f"Deleted {user_count} user entries for user_id {user_id}")
+                        
+                        # Delete from superusers if exists (this might be a real table)
+                        cursor.execute("DELETE FROM mosquitto_superusers WHERE username = %s", [mqtt_username])
+                        super_count = cursor.rowcount
+                        print(f"Deleted {super_count} superuser entries for {mqtt_username}")
+                        
+                        cursor.execute("COMMIT")
+                    else:
+                        print(f"User {mqtt_username} not found in users table")
+                    
+                    # Clear profile MQTT flags
+                    profile.mqtt_password_set = False
+                    profile.mqtt_connected = False
+                    profile.mqtt_username = None  # Clear the username too
+                    profile.save()
+                    print(f"Profile flags cleared for {request.user.username}")
+                else:
+                    print(f"No MQTT username found for user {request.user.username}")
+                    
+            except Exception as e:
+                print(f"Error cleaning up hosted cluster mosquitto data: {e}")
+                import traceback
+                traceback.print_exc()
+        
+        # Delete the cluster record
+        return super().destroy(request, *args, **kwargs)
 
 
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def mqtt_cluster_stats(request, cluster_uuid):
-    """Get detailed statistics for a specific MQTT cluster"""
-    
-    try:
-        cluster = MqttCluster.objects.get(uuid=cluster_uuid, user=request.user)
-    except MqttCluster.DoesNotExist:
-        return Response({'error': 'Cluster not found'}, status=404)
-    
-    # Get recent activities
-    recent_activities = cluster.activities.order_by('-timestamp')[:20]
-    
-    # Get topic statistics
-    active_topics = cluster.topics.filter(is_active=True).order_by('-last_message_at')
-    
-    # Calculate some basic stats
-    from django.db.models import Sum, Count
-    from datetime import datetime, timedelta
-    
-    # Get activity for different time periods
-    now = datetime.now()
-    today = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    week_ago = today - timedelta(days=7)
-    
-    today_activities = cluster.activities.filter(timestamp__gte=today)
-    week_activities = cluster.activities.filter(timestamp__gte=week_ago)
-    
-    stats = {
-        'cluster': MqttClusterSerializer(cluster).data,
-        'topic_stats': {
-            'active_topics': active_topics.count(),
-            'total_messages': cluster.total_messages,
-            'total_subscriptions': cluster.total_subscriptions,
-        },
-        'activity_stats': {
-            'today': {
-                'total_messages': today_activities.filter(activity_type='publish').count(),
-                'connections': today_activities.filter(activity_type='connect').count(),
-                'subscriptions': today_activities.filter(activity_type='subscribe').count(),
-            },
-            'this_week': {
-                'total_messages': week_activities.filter(activity_type='publish').count(),
-                'connections': week_activities.filter(activity_type='connect').count(),
-                'subscriptions': week_activities.filter(activity_type='subscribe').count(),
-            }
-        },
-        'recent_activities': MqttActivitySerializer(recent_activities, many=True).data,
-        'active_topics': MqttTopicSerializer(active_topics[:10], many=True).data
-    }
-    
-    return Response(stats)
+
 
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def mqtt_cluster_test_connection(request, cluster_uuid):
-    """Test connection to an MQTT cluster"""
+    """Test actual MQTT connection to a cluster with proper MQTT client"""
     
     try:
         cluster = MqttCluster.objects.get(uuid=cluster_uuid, user=request.user)
     except MqttCluster.DoesNotExist:
         return Response({'error': 'Cluster not found'}, status=404)
     
-    # This is a placeholder for actual connection testing
-    # In a real implementation, you would use an MQTT client library
-    # to test the connection
-    
     try:
-        import socket
+        # Get credentials from request
+        username = request.data.get('username') if request.data.get('username') else cluster.username
+        password = request.data.get('password') if request.data.get('password') else cluster.password
         
-        # Simple socket test to check if host is reachable
-        sock = socket.create_connection((cluster.host, cluster.port), timeout=5)
-        sock.close()
+        # For hosted clusters with placeholder password, ask user to provide password for testing
+        if cluster.cluster_type == 'hosted' and (not password or password == '[encrypted]'):
+            if not request.data.get('password'):
+                return Response({
+                    'status': 'error', 
+                    'message': 'Please provide your MQTT password for connection testing'
+                }, status=400)
+            password = request.data.get('password')
         
-        # Log the test activity
-        MqttActivity.objects.create(
-            cluster=cluster,
-            activity_type='connect',
-            client_id=f'test_client_{request.user.username}',
-            topic_name='$SYS/test'
-        )
+        if not username or not password:
+            return Response({
+                'status': 'error', 
+                'message': 'Username and password required for testing'
+            }, status=400)
         
-        return Response({
-            'status': 'success',
-            'message': f'Successfully connected to {cluster.host}:{cluster.port}',
-            'connection_url': cluster.connection_url
-        })
+        # Test actual MQTT connection
+        import paho.mqtt.client as mqtt
+        import threading
+        import time
+        
+        connection_result = {'success': False, 'error': None, 'message': None}
+        connection_event = threading.Event()
+        
+        def on_connect(client, userdata, flags, rc):
+            if rc == 0:
+                connection_result['success'] = True
+                connection_result['message'] = f'Successfully connected to {cluster.host}:{cluster.port}'
+            else:
+                connection_result['success'] = False
+                connection_result['error'] = f'MQTT connection failed with code {rc}'
+            connection_event.set()
+        
+        def on_disconnect(client, userdata, rc):
+            pass
+        
+        # Create MQTT client
+        client = mqtt.Client(client_id=f'test_client_{request.user.username}_{int(time.time())}')
+        client.on_connect = on_connect
+        client.on_disconnect = on_disconnect
+        
+        # Set credentials
+        if username and password:
+            client.username_pw_set(username, password)
+        
+        try:
+            # Connect to broker
+            client.connect(cluster.host, cluster.port, 60)
+            client.loop_start()
+            
+            # Wait for connection result (max 10 seconds)
+            if connection_event.wait(timeout=10):
+                client.disconnect()
+                client.loop_stop()
+                
+                if connection_result['success']:
+                    # Log successful test activity
+                    MqttActivity.objects.create(
+                        cluster=cluster,
+                        activity_type='connect',
+                        client_id=f'test_client_{request.user.username}',
+                        topic_name='$SYS/test'
+                    )
+                    
+                    return Response({
+                        'status': 'success',
+                        'message': connection_result['message'],
+                        'connection_url': cluster.connection_url
+                    })
+                else:
+                    return Response({
+                        'status': 'error',
+                        'message': connection_result['error'],
+                        'connection_url': cluster.connection_url
+                    }, status=400)
+            else:
+                client.disconnect()
+                client.loop_stop()
+                return Response({
+                    'status': 'error',
+                    'message': 'Connection timeout - broker not responding',
+                    'connection_url': cluster.connection_url
+                }, status=400)
+                
+        except Exception as mqtt_error:
+            return Response({
+                'status': 'error',
+                'message': f'Failed to connect: {str(mqtt_error)}',
+                'connection_url': cluster.connection_url
+            }, status=400)
         
     except Exception as e:
         return Response({
             'status': 'error',
-            'message': f'Failed to connect: {str(e)}',
-            'connection_url': cluster.connection_url
-        }, status=400)
+            'message': f'Test failed: {str(e)}'
+        }, status=500)
+
+
+
+
+
+
+
+
+
+
+
 
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
-def mqtt_statistics(request):
-    """
-    Get MQTT statistics for the current user from mosquitto database
-    
-    PROPOSED REAL TRAFFIC CALCULATION APPROACH:
-    
-    1. TOPIC STATISTICS:
-       - Count unique topics from mosquitto_acls table
-       - Track actual active topics from MQTT broker logs (future enhancement)
-       - Monitor topic hierarchy and wildcards
-    
-    2. MESSAGE COUNT:
-       - Current: Estimated based on topic count
-       - Proposed: Integrate with MQTT broker logging/monitoring
-       - Use $SYS/broker/messages/publish/received from broker
-       - Store message counts in Django models (MqttActivity table)
-    
-    3. TRAFFIC CALCULATION:
-       - Current: Estimated based on message count * average size
-       - Proposed: 
-         a) Log actual message sizes in MqttActivity model
-         b) Use MQTT broker's $SYS/broker/bytes/sent and $SYS/broker/bytes/received
-         c) Implement MQTT client that subscribes to $SYS topics for real stats
-         d) Store traffic data with timestamps for historical tracking
-    
-    4. REAL-TIME ACTIVITY:
-       - Current: Generated from ACL patterns
-       - Proposed:
-         a) Use MQTT broker event hooks/plugins
-         b) Log connect/disconnect/publish/subscribe events to MqttActivity
-         c) Real-time WebSocket updates to frontend
-         d) Parse broker log files for activity extraction
-    
-    5. IMPLEMENTATION STRATEGY:
-       - Phase 1: Current ACL-based estimation (implemented)
-       - Phase 2: Add MQTT client for $SYS topic monitoring
-       - Phase 3: Integrate broker event logging
-       - Phase 4: Real-time activity streaming
-    """
+def user_mqtt_info(request):
+    """API endpoint for getting user's MQTT connection information"""
     
     try:
-        # Get user's MQTT username
+        # Get or create user profile
         try:
             profile = request.user.profile
-            mqtt_username = profile.mqtt_username
-            if not mqtt_username:
-                return Response({'error': 'MQTT username not set'}, status=400)
         except UserProfile.DoesNotExist:
-            return Response({'error': 'User profile not found'}, status=404)
+            profile = UserProfile.objects.create(user=request.user)
         
-        from django.db import connections
-        cursor = connections['mosquitto'].cursor()
+        # Get MQTT username (could be None if not set yet)
+        mqtt_username = profile.mqtt_username if profile.mqtt_username else None
+        has_password = False
         
-        # Get all ACLs for this user
-        cursor.execute("SELECT topic, rw FROM mosquitto_acls WHERE username = %s", [mqtt_username])
-        acls = cursor.fetchall()
+        # Check mosquitto database for actual credentials (this is the source of truth)
+        if mqtt_username:
+            try:
+                from django.db import connections
+                cursor = connections['mosquitto'].cursor()
+                cursor.execute("SELECT COUNT(*) FROM mosquitto_users WHERE username = %s", [mqtt_username])
+                has_password = cursor.fetchone()[0] > 0
+            except Exception as e:
+                print(f"Error checking MQTT user: {e}")
+                has_password = False
         
-        # Calculate statistics
-        unique_topics = set(acl[0] for acl in acls)
-        topic_count = len(unique_topics)
-        
-        # Count different access types
-        pub_count = len([acl for acl in acls if acl[1] in [2, 3]])  # Write or Read/Write
-        sub_count = len([acl for acl in acls if acl[1] == 4])  # Subscribe
-        read_count = len([acl for acl in acls if acl[1] in [1, 3]])  # Read or Read/Write
-        
-        # Estimate message count based on topics (placeholder calculation)
-        estimated_messages = topic_count * 50  # Rough estimate
-        
-        # Calculate estimated traffic (placeholder)
-        traffic_kb = estimated_messages * 0.5  # Assume 0.5KB per message
-        
-        # Generate recent activity from ACLs
-        recent_activities = []
-        for i, acl in enumerate(acls[:5]):
-            activity_type = 'PUB' if acl[1] in [2, 3] else 'SUB' if acl[1] == 4 else 'READ'
-            recent_activities.append({
-                'type': activity_type,
-                'topic': acl[0],
-                'time': f'{(i + 1) * 2}m ago'
-            })
-        
-        stats = {
-            'topics': topic_count,
-            'messages': estimated_messages,
-            'subscriptions': sub_count,
-            'publishers': pub_count,
-            'readers': read_count,
-            'activities': recent_activities,
-            'traffic': {
-                'today_kb': round(traffic_kb * 0.1, 1),
-                'week_kb': round(traffic_kb * 0.7, 1),
-                'lifetime_kb': round(traffic_kb * 2.5, 1)
-            },
-            'acl_count': len(acls)
-        }
-        
-        return Response(stats)
+        return Response({
+            'username': mqtt_username,
+            'hasPassword': has_password,
+            'passwordSet': profile.mqtt_password_set,
+            'connected': profile.mqtt_connected,
+            'subscriptionType': profile.subscription_type,
+            'deviceLimit': profile.device_limit,
+            'broker': {
+                'host': '13.203.165.247',
+                'port': 1883,
+                'websocketPort': 1884
+            }
+        })
         
     except Exception as e:
-        print(f"Error calculating MQTT statistics: {e}")
-        return Response({'error': 'Failed to calculate statistics'}, status=500)
-
+        print(f"Error in user_mqtt_info: {e}")
+        return Response({
+            'error': 'Failed to load MQTT information'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @api_view(['DELETE'])
 @permission_classes([IsAuthenticated])
