@@ -21,6 +21,7 @@ from django.views.generic import TemplateView
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import redirect
 from django.contrib.auth import views as auth_views
+from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 
 def home_view(request):
     """Redirect logged-in users to dashboard, show landing page for anonymous users"""
@@ -35,6 +36,11 @@ urlpatterns = [
     path('api/', include('user.urls')),  # Add user authentication APIs
     path('api/', include('flows.urls')),  # Add flows APIs
     path('', include('sensors.urls')),  # Include sensors URLs at root level
+    
+    # API Documentation URLs (Swagger/OpenAPI)
+    path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
+    path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
+    path('api/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
     
     # Documentation URLs
     path('docs/', TemplateView.as_view(template_name='docs.html'), name='docs'),

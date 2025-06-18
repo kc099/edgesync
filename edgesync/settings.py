@@ -54,6 +54,7 @@ INSTALLED_APPS = [
     "rest_framework_simplejwt.token_blacklist",
     "corsheaders",
     "django_filters",
+    "drf_spectacular",
     "user",
     "sensors",
     "flows",
@@ -115,6 +116,69 @@ DATABASES = {
             "charset": "utf8mb4",
         },
     }
+}
+
+# drf-spectacular settings for Swagger/OpenAPI documentation
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'EdgeSync Multi-Tenant IoT Platform API',
+    'DESCRIPTION': 'A comprehensive IoT platform for multi-tenant device management, data collection, and real-time analytics with MQTT support and flow-based automation.',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+    # OTHER SETTINGS
+    'SCHEMA_PATH_PREFIX': '/api/',
+    'COMPONENT_SPLIT_REQUEST': True,
+    'TAGS': [
+        {
+            'name': 'Authentication',
+            'description': 'User authentication and authorization endpoints'
+        },
+        {
+            'name': 'Users',
+            'description': 'User profile and organization management'
+        },
+        {
+            'name': 'Organizations',
+            'description': 'Organization and tenant management'
+        },
+        {
+            'name': 'Dashboard Templates',
+            'description': 'Dashboard template management for organizations'
+        },
+        {
+            'name': 'Devices',
+            'description': 'IoT device registration and management'
+        },
+        {
+            'name': 'Sensor Data',
+            'description': 'Sensor data collection and analytics'
+        },
+        {
+            'name': 'MQTT',
+            'description': 'MQTT cluster and topic management'
+        },
+        {
+            'name': 'Flows',
+            'description': 'Visual flow diagram creation and execution'
+        },
+    ],
+    'AUTHENTICATION_WHITELIST': [
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
+    ],
+    'SECURITY_DEFINITIONS': {
+        'Bearer': {
+            'type': 'apiKey',
+            'name': 'Authorization',
+            'in': 'header',
+            'description': 'JWT Authorization header using the Bearer scheme. Example: "Authorization: Bearer {token}"'
+        }
+    },
+    'SERVERS': [
+        {
+            'url': 'http://localhost:8000',
+            'description': 'Development server'
+        },
+    ],
 }
 
 # Database routing
@@ -190,6 +254,7 @@ REST_FRAMEWORK = {
     'DEFAULT_RENDERER_CLASSES': [
         'rest_framework.renderers.JSONRenderer',
     ],
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
 
 # JWT Settings

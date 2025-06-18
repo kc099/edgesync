@@ -7,6 +7,8 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
+from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiParameter
+from drf_spectacular.openapi import OpenApiTypes
 from .models import SensorData, Device, MqttCluster, MqttTopic, MqttActivity
 from user.models import MosquittoUser, MosquittoACL, MosquittoSuperuser, UserProfile, DeviceHistory
 from .serializers import SensorDataSerializer, MqttClusterSerializer, MqttClusterListSerializer, MqttTopicSerializer, MqttActivitySerializer
@@ -28,6 +30,34 @@ def dashboard(request):
     """Render the main dashboard page"""
     return render(request, 'dashboard.html')
 
+@extend_schema_view(
+    list=extend_schema(
+        operation_id='list_sensor_data',
+        tags=['Sensor Data'],
+        summary='List Sensor Data',
+        description='Retrieve sensor data with filtering and pagination options',
+        parameters=[
+            OpenApiParameter(
+                name='device_id',
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                description='Filter by device ID'
+            ),
+            OpenApiParameter(
+                name='sensor_type',
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                description='Filter by sensor type'
+            ),
+            OpenApiParameter(
+                name='ordering',
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                description='Order by timestamp (use -timestamp for descending)'
+            ),
+        ]
+    )
+)
 class SensorDataListView(generics.ListAPIView):
     """API endpoint for retrieving sensor data with filtering and pagination"""
     queryset = SensorData.objects.all()
@@ -37,6 +67,45 @@ class SensorDataListView(generics.ListAPIView):
     ordering_fields = ['timestamp']
     ordering = ['-timestamp']
 
+@extend_schema(
+    operation_id='get_sensor_data_summary',
+    tags=['Sensor Data'],
+    summary='Get Sensor Data Summary',
+    description='Retrieve summary statistics and metadata for sensor data',
+    parameters=[
+        OpenApiParameter(
+            name='device_id',
+            type=OpenApiTypes.STR,
+            location=OpenApiParameter.QUERY,
+            description='Filter summary by device ID'
+        ),
+        OpenApiParameter(
+            name='sensor_type',
+            type=OpenApiTypes.STR,
+            location=OpenApiParameter.QUERY,
+            description='Filter summary by sensor type'
+        ),
+    ],
+    responses={
+        200: {
+            'type': 'object',
+            'properties': {
+                'summary': {
+                    'type': 'object',
+                    'properties': {
+                        'total_readings': {'type': 'integer'},
+                        'avg_value': {'type': 'number'},
+                        'max_value': {'type': 'number'},
+                        'min_value': {'type': 'number'},
+                        'latest_reading': {'type': 'string', 'format': 'date-time'}
+                    }
+                },
+                'devices': {'type': 'array', 'items': {'type': 'string'}},
+                'sensor_types': {'type': 'array', 'items': {'type': 'string'}}
+            }
+        }
+    }
+)
 @api_view(['GET'])
 def sensor_data_summary(request):
     """API endpoint for getting summary statistics of sensor data"""
@@ -101,6 +170,50 @@ def device_registration(request):
     return render(request, 'device_registration.html')
 
 
+@extend_schema(
+    operation_id='list_create_devices',
+    tags=['Devices'],
+    summary='List or Create Devices',
+    description='Retrieve devices for the current user or register a new IoT device',
+    request={
+        'type': 'object',
+        'properties': {
+            'deviceId': {'type': 'string', 'description': 'Unique device identifier'},
+            'deviceName': {'type': 'string', 'description': 'Human-readable device name'},
+            'deviceType': {'type': 'string', 'description': 'Type of device (e.g., sensor, actuator)'},
+            'tenantId': {'type': 'string', 'description': 'Tenant/organization identifier'},
+            'permissions': {'type': 'array', 'items': {'type': 'string'}, 'description': 'Device permissions'}
+        },
+        'required': ['deviceId', 'deviceName', 'deviceType', 'tenantId']
+    },
+    responses={
+        200: {
+            'type': 'array',
+            'items': {
+                'type': 'object',
+                'properties': {
+                    'deviceId': {'type': 'string'},
+                    'deviceName': {'type': 'string'},
+                    'deviceType': {'type': 'string'},
+                    'tenantId': {'type': 'string'},
+                    'isActive': {'type': 'boolean'},
+                    'createdAt': {'type': 'string', 'format': 'date-time'},
+                    'permissions': {'type': 'array', 'items': {'type': 'string'}}
+                }
+            }
+        },
+        201: {
+            'type': 'object',
+            'description': 'Device created successfully'
+        },
+        400: {
+            'type': 'object',
+            'properties': {
+                'error': {'type': 'string'}
+            }
+        }
+    }
+)
 @api_view(['GET', 'POST'])
 @permission_classes([IsAuthenticated])
 def device_list_create(request):
@@ -586,8 +699,44 @@ def acl_detail(request, acl_id):
 
 # MQTT Cluster Management Views
 
-
-
+@extend_schema_view(
+    list=extend_schema(
+        operation_id='list_mqtt_clusters',
+        tags=['MQTT'],
+        summary='List MQTT Clusters',
+        description='Retrieve all MQTT clusters for the current user'
+    ),
+    create=extend_schema(
+        operation_id='create_mqtt_cluster',
+        tags=['MQTT'],
+        summary='Create MQTT Cluster',
+        description='Create a new MQTT cluster configuration'
+    ),
+    retrieve=extend_schema(
+        operation_id='get_mqtt_cluster',
+        tags=['MQTT'],
+        summary='Get MQTT Cluster',
+        description='Retrieve a specific MQTT cluster by UUID'
+    ),
+    update=extend_schema(
+        operation_id='update_mqtt_cluster',
+        tags=['MQTT'],
+        summary='Update MQTT Cluster',
+        description='Update an MQTT cluster configuration'
+    ),
+    partial_update=extend_schema(
+        operation_id='partial_update_mqtt_cluster',
+        tags=['MQTT'],
+        summary='Partially Update MQTT Cluster',
+        description='Partially update an MQTT cluster configuration'
+    ),
+    destroy=extend_schema(
+        operation_id='delete_mqtt_cluster',
+        tags=['MQTT'],
+        summary='Delete MQTT Cluster',
+        description='Delete an MQTT cluster and clean up associated credentials'
+    ),
+)
 class MqttClusterViewSet(viewsets.ModelViewSet):
     """ViewSet for managing MQTT clusters"""
     

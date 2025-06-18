@@ -9,6 +9,8 @@ from django.contrib.auth.models import User
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 from django.db.models import Q
+from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiExample
+from drf_spectacular.openapi import OpenApiTypes
 import json
 
 from .serializers import (
@@ -30,6 +32,28 @@ def get_tokens_for_user(user):
     }
 
 
+@extend_schema(
+    operation_id='get_public_key',
+    tags=['Authentication'],
+    summary='Get RSA Public Key',
+    description='Retrieve the RSA public key for encrypting authentication data',
+    responses={
+        200: {
+            'type': 'object',
+            'properties': {
+                'public_key': {'type': 'string', 'description': 'RSA public key in PEM format'},
+                'status': {'type': 'string', 'description': 'Operation status'}
+            }
+        },
+        500: {
+            'type': 'object',
+            'properties': {
+                'error': {'type': 'string'},
+                'status': {'type': 'string'}
+            }
+        }
+    }
+)
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def public_key_view(request):
@@ -47,6 +71,51 @@ def public_key_view(request):
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+@extend_schema(
+    operation_id='user_login',
+    tags=['Authentication'],
+    summary='User Login',
+    description='Authenticate user with encrypted credentials and receive JWT tokens',
+    request={
+        'type': 'object',
+        'properties': {
+            'data': {'type': 'string', 'description': 'Encrypted login data'},
+            'key': {'type': 'string', 'description': 'Encrypted AES key'},
+            'iv': {'type': 'string', 'description': 'Initialization vector'}
+        },
+        'required': ['data', 'key', 'iv'],
+        'example': {
+            'data': 'encrypted_login_data_here',
+            'key': 'encrypted_aes_key_here',
+            'iv': 'initialization_vector_here'
+        }
+    },
+    responses={
+        200: {
+            'type': 'object',
+            'properties': {
+                'token': {'type': 'string', 'description': 'JWT access token'},
+                'refresh': {'type': 'string', 'description': 'JWT refresh token'},
+                'user': {'type': 'object', 'description': 'User profile data'},
+                'status': {'type': 'string', 'description': 'Operation status'}
+            }
+        },
+        400: {
+            'type': 'object',
+            'properties': {
+                'error': {'type': 'object'},
+                'status': {'type': 'string'}
+            }
+        },
+        500: {
+            'type': 'object',
+            'properties': {
+                'error': {'type': 'string'},
+                'status': {'type': 'string'}
+            }
+        }
+    }
+)
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def login_view(request):
@@ -107,6 +176,51 @@ def login_view(request):
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+@extend_schema(
+    operation_id='user_signup',
+    tags=['Authentication'],
+    summary='User Registration',
+    description='Register a new user with encrypted credentials and receive JWT tokens',
+    request={
+        'type': 'object',
+        'properties': {
+            'data': {'type': 'string', 'description': 'Encrypted registration data'},
+            'key': {'type': 'string', 'description': 'Encrypted AES key'},
+            'iv': {'type': 'string', 'description': 'Initialization vector'}
+        },
+        'required': ['data', 'key', 'iv'],
+        'example': {
+            'data': 'encrypted_registration_data_here',
+            'key': 'encrypted_aes_key_here',
+            'iv': 'initialization_vector_here'
+        }
+    },
+    responses={
+        201: {
+            'type': 'object',
+            'properties': {
+                'token': {'type': 'string', 'description': 'JWT access token'},
+                'refresh': {'type': 'string', 'description': 'JWT refresh token'},
+                'user': {'type': 'object', 'description': 'User profile data'},
+                'status': {'type': 'string', 'description': 'Operation status'}
+            }
+        },
+        400: {
+            'type': 'object',
+            'properties': {
+                'error': {'type': 'object'},
+                'status': {'type': 'string'}
+            }
+        },
+        500: {
+            'type': 'object',
+            'properties': {
+                'error': {'type': 'string'},
+                'status': {'type': 'string'}
+            }
+        }
+    }
+)
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def signup_view(request):
@@ -157,6 +271,35 @@ def signup_view(request):
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+@extend_schema(
+    operation_id='user_logout',
+    tags=['Authentication'],
+    summary='User Logout',
+    description='Logout user by blacklisting the refresh token',
+    request={
+        'type': 'object',
+        'properties': {
+            'refresh_token': {'type': 'string', 'description': 'JWT refresh token to blacklist'}
+        },
+        'required': ['refresh_token']
+    },
+    responses={
+        200: {
+            'type': 'object',
+            'properties': {
+                'message': {'type': 'string'},
+                'status': {'type': 'string'}
+            }
+        },
+        400: {
+            'type': 'object',
+            'properties': {
+                'error': {'type': 'string'},
+                'status': {'type': 'string'}
+            }
+        }
+    }
+)
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def logout_view(request):
@@ -182,6 +325,28 @@ def logout_view(request):
         }, status=status.HTTP_400_BAD_REQUEST)
 
 
+@extend_schema(
+    operation_id='get_user_profile',
+    tags=['Users'],
+    summary='Get User Profile',
+    description='Retrieve the current user\'s profile information',
+    responses={
+        200: {
+            'type': 'object',
+            'properties': {
+                'user': {'type': 'object', 'description': 'User profile data'},
+                'status': {'type': 'string'}
+            }
+        },
+        401: {
+            'type': 'object',
+            'properties': {
+                'error': {'type': 'string'},
+                'status': {'type': 'string'}
+            }
+        }
+    }
+)
 @api_view(['GET'])
 def profile_view(request):
     """Get user profile - requires authentication"""
@@ -199,6 +364,44 @@ def profile_view(request):
 
 # Organization Management Views
 
+@extend_schema(
+    operation_id='list_create_organizations',
+    tags=['Organizations'],
+    summary='List or Create Organizations',
+    description='Retrieve organizations for the current user or create a new organization',
+    request={
+        'type': 'object',
+        'properties': {
+            'name': {'type': 'string', 'description': 'Organization name'},
+            'description': {'type': 'string', 'description': 'Organization description'},
+            'settings': {'type': 'object', 'description': 'Organization settings'}
+        },
+        'required': ['name']
+    },
+    responses={
+        200: {
+            'type': 'object',
+            'properties': {
+                'organizations': {'type': 'array', 'items': {'type': 'object'}},
+                'status': {'type': 'string'}
+            }
+        },
+        201: {
+            'type': 'object',
+            'properties': {
+                'organization': {'type': 'object'},
+                'status': {'type': 'string'}
+            }
+        },
+        400: {
+            'type': 'object',
+            'properties': {
+                'error': {'type': 'object'},
+                'status': {'type': 'string'}
+            }
+        }
+    }
+)
 @api_view(['GET', 'POST'])
 @permission_classes([IsAuthenticated])
 def organizations_view(request):

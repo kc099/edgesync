@@ -4,11 +4,50 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.shortcuts import get_object_or_404
+from drf_spectacular.utils import extend_schema, extend_schema_view
 from .models import FlowDiagram, FlowExecution
 from .serializers import FlowDiagramSerializer, FlowExecutionSerializer
 
 # Create your views here.
 
+@extend_schema_view(
+    list=extend_schema(
+        operation_id='list_flows',
+        tags=['Flows'],
+        summary='List Flow Diagrams',
+        description='Retrieve all flow diagrams for the current user'
+    ),
+    create=extend_schema(
+        operation_id='create_flow',
+        tags=['Flows'],
+        summary='Create Flow Diagram',
+        description='Create a new flow diagram'
+    ),
+    retrieve=extend_schema(
+        operation_id='get_flow',
+        tags=['Flows'],
+        summary='Get Flow Diagram',
+        description='Retrieve a specific flow diagram by UUID'
+    ),
+    update=extend_schema(
+        operation_id='update_flow',
+        tags=['Flows'],
+        summary='Update Flow Diagram',
+        description='Update a flow diagram'
+    ),
+    partial_update=extend_schema(
+        operation_id='partial_update_flow',
+        tags=['Flows'],
+        summary='Partially Update Flow Diagram',
+        description='Partially update a flow diagram'
+    ),
+    destroy=extend_schema(
+        operation_id='delete_flow',
+        tags=['Flows'],
+        summary='Delete Flow Diagram',
+        description='Delete a flow diagram'
+    ),
+)
 class FlowDiagramViewSet(viewsets.ModelViewSet):
     serializer_class = FlowDiagramSerializer
     permission_classes = [IsAuthenticated]
@@ -20,6 +59,22 @@ class FlowDiagramViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(owner=self.request.user)
 
+    @extend_schema(
+        operation_id='execute_flow',
+        tags=['Flows'],
+        summary='Execute Flow Diagram',
+        description='Execute a flow diagram and start processing',
+        responses={
+            200: {
+                'type': 'object',
+                'properties': {
+                    'execution_id': {'type': 'integer'},
+                    'status': {'type': 'string'},
+                    'message': {'type': 'string'}
+                }
+            }
+        }
+    )
     @action(detail=True, methods=['post'])
     def execute(self, request, pk=None):
         """Execute a flow diagram"""
@@ -39,6 +94,18 @@ class FlowDiagramViewSet(viewsets.ModelViewSet):
             'message': 'Flow execution started'
         })
 
+    @extend_schema(
+        operation_id='duplicate_flow',
+        tags=['Flows'],
+        summary='Duplicate Flow Diagram',
+        description='Create a copy of an existing flow diagram',
+        responses={
+            201: {
+                'type': 'object',
+                'description': 'Duplicated flow diagram data'
+            }
+        }
+    )
     @action(detail=True, methods=['post'])
     def duplicate(self, request, pk=None):
         """Duplicate a flow diagram"""
@@ -55,6 +122,27 @@ class FlowDiagramViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(new_flow)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
+    @extend_schema(
+        operation_id='get_flow_templates',
+        tags=['Flows'],
+        summary='Get Flow Templates',
+        description='Retrieve predefined flow diagram templates',
+        responses={
+            200: {
+                'type': 'array',
+                'items': {
+                    'type': 'object',
+                    'properties': {
+                        'name': {'type': 'string'},
+                        'description': {'type': 'string'},
+                        'nodes': {'type': 'array'},
+                        'edges': {'type': 'array'},
+                        'tags': {'type': 'array'}
+                    }
+                }
+            }
+        }
+    )
     @action(detail=False, methods=['get'])
     def templates(self, request):
         """Get predefined flow templates"""
