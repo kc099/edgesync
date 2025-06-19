@@ -92,6 +92,54 @@ class OrganizationMember(models.Model):
         return f"{self.user.username} - {self.organization.name} ({self.role})"
 
 
+class Project(models.Model):
+    """Project model that unifies Flows and DashboardTemplates under an Organization"""
+    
+    PROJECT_STATUS_CHOICES = [
+        ('active', 'Active'),
+        ('inactive', 'Inactive'),
+        ('archived', 'Archived'),
+    ]
+    
+    # Unique shareable identifier
+    uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
+    
+    name = models.CharField(max_length=200, help_text="Project name")
+    description = models.TextField(blank=True, help_text="Project description")
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='projects')
+    creator = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_projects')
+    
+    # Project status and metadata
+    status = models.CharField(max_length=20, choices=PROJECT_STATUS_CHOICES, default='active')
+    tags = models.JSONField(default=list, help_text="Project tags for categorization")
+    metadata = models.JSONField(default=dict, help_text="Additional project metadata")
+    
+    # Project settings
+    auto_save = models.BooleanField(default=True, help_text="Auto-save flow changes")
+    data_retention_days = models.IntegerField(default=30, help_text="Data retention period in days")
+    
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(default=timezone.now)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        db_table = 'projects'
+        ordering = ['-updated_at']
+        unique_together = ['organization', 'name']
+    
+    def __str__(self):
+        return f"{self.name} ({self.organization.name})"
+    
+    def get_flow_count(self):
+        """Get number of flows in this project"""
+        from flows.models import FlowDiagram
+        return FlowDiagram.objects.filter(project=self).count()
+    
+    def get_dashboard_count(self):
+        """Get number of dashboard templates in this project"""
+        return self.dashboard_templates.count()
+
+
 class DashboardTemplate(models.Model):
     """Dashboard template model for organizations"""
     
@@ -119,6 +167,7 @@ class DashboardTemplate(models.Model):
     name = models.CharField(max_length=200, help_text="Template name")
     description = models.TextField(blank=True, help_text="Template description")
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='dashboard_templates')
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='dashboard_templates', null=True, blank=True)
     creator = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_templates')
     
     # Dashboard configuration

@@ -17,10 +17,11 @@ from .serializers import (
     LoginSerializer, SignupSerializer, UserSerializer,
     OrganizationSerializer, OrganizationMemberSerializer,
     DashboardTemplateSerializer, TemplatePermissionSerializer,
-    CreateOrganizationSerializer, CreateDashboardTemplateSerializer
+    CreateOrganizationSerializer, CreateDashboardTemplateSerializer,
+    ProjectSerializer, CreateProjectSerializer
 )
 from .utils.encryption import encryption_manager
-from .models import UserProfile, Organization, OrganizationMember, DashboardTemplate, TemplatePermission
+from .models import UserProfile, Organization, OrganizationMember, DashboardTemplate, TemplatePermission, Project
 
 
 def get_tokens_for_user(user):
@@ -595,3 +596,153 @@ def dashboard_template_detail_view(request, template_uuid):
             'error': 'Template not found',
             'status': 'error'
         }, status=status.HTTP_404_NOT_FOUND)
+
+
+@extend_schema(
+    operation_id='list_create_projects',
+    tags=['Projects'],
+    summary='List or Create Projects',
+    description='Retrieve projects for the current user or create a new project',
+    request={
+        'type': 'object',
+        'properties': {
+            'name': {'type': 'string', 'description': 'Project name'},
+            'description': {'type': 'string', 'description': 'Project description'},
+            'organization_id': {'type': 'integer', 'description': 'Organization ID'},
+            'status': {'type': 'string', 'description': 'Project status'},
+            'tags': {'type': 'array', 'items': {'type': 'string'}, 'description': 'Project tags'},
+            'metadata': {'type': 'object', 'description': 'Project metadata'},
+            'auto_save': {'type': 'boolean', 'description': 'Auto-save enabled'},
+            'data_retention_days': {'type': 'integer', 'description': 'Data retention period'}
+        },
+        'required': ['name', 'organization_id']
+    },
+    responses={
+        200: {
+            'type': 'object',
+            'properties': {
+                'projects': {'type': 'array', 'items': {'type': 'object'}},
+                'status': {'type': 'string'}
+            }
+        },
+        201: {
+            'type': 'object',
+            'properties': {
+                'project': {'type': 'object'},
+                'status': {'type': 'string'}
+            }
+        },
+        400: {
+            'type': 'object',
+            'properties': {
+                'error': {'type': 'object'},
+                'status': {'type': 'string'}
+            }
+        }
+    }
+)
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated])
+def projects_view(request):
+    """List projects for user or create new project"""
+    try:
+        if request.method == 'GET':
+            # Get projects for organizations where user is a member
+            user_orgs = Organization.objects.filter(
+                members__user=request.user
+            ).values_list('id', flat=True)
+            
+            projects = Project.objects.filter(
+                organization_id__in=user_orgs,
+                is_active=True
+            ).select_related('organization', 'creator')
+            
+            serializer = ProjectSerializer(projects, many=True)
+            return Response({
+                'projects': serializer.data,
+                'status': 'success'
+            })
+        
+        elif request.method == 'POST':
+            serializer = CreateProjectSerializer(data=request.data, context={'request': request})
+            if serializer.is_valid():
+                project = serializer.save()
+                return Response({
+                    'project': ProjectSerializer(project).data,
+                    'status': 'success'
+                }, status=status.HTTP_201_CREATED)
+            else:
+                return Response({
+                    'error': serializer.errors,
+                    'status': 'error'
+                }, status=status.HTTP_400_BAD_REQUEST)
+                
+    except Exception as e:
+        return Response({
+            'error': 'Failed to process projects request',
+            'status': 'error'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET', 'PUT', 'DELETE'])
+@permission_classes([IsAuthenticated])
+def project_detail_view(request, project_uuid):
+    """Get, update, or delete a specific project"""
+    try:
+        project = Project.objects.select_related('organization', 'creator').get(
+            uuid=project_uuid,
+            organization__members__user=request.user
+        )
+        
+        if request.method == 'GET':
+            serializer = ProjectSerializer(project)
+            return Response({
+                'project': serializer.data,
+                'status': 'success'
+            })
+        
+        elif request.method == 'PUT':
+            # Check if user has admin access
+            if not project.organization.members.filter(user=request.user, role='admin').exists():
+                return Response({
+                    'error': 'Admin access required to update projects',
+                    'status': 'error'
+                }, status=status.HTTP_403_FORBIDDEN)
+            
+            serializer = ProjectSerializer(project, data=request.data, partial=True)
+            if serializer.is_valid():
+                project = serializer.save()
+                return Response({
+                    'project': ProjectSerializer(project).data,
+                    'status': 'success'
+                })
+            else:
+                return Response({
+                    'error': serializer.errors,
+                    'status': 'error'
+                }, status=status.HTTP_400_BAD_REQUEST)
+        
+        elif request.method == 'DELETE':
+            # Check if user has admin access
+            if not project.organization.members.filter(user=request.user, role='admin').exists():
+                return Response({
+                    'error': 'Admin access required to delete projects',
+                    'status': 'error'
+                }, status=status.HTTP_403_FORBIDDEN)
+            
+            project.delete()
+            return Response({
+                'message': 'Project deleted successfully',
+                'status': 'success'
+            })
+            
+    except Project.DoesNotExist:
+        return Response({
+            'error': 'Project not found',
+            'status': 'error'
+        }, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({
+            'error': 'Failed to process project request',
+            'status': 'error'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

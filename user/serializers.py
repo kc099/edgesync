@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
 from django.contrib.auth import authenticate
-from .models import UserProfile, Organization, OrganizationMember, DashboardTemplate, TemplatePermission
+from .models import UserProfile, Organization, OrganizationMember, DashboardTemplate, TemplatePermission, Project
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -112,15 +112,65 @@ class OrganizationMemberSerializer(serializers.ModelSerializer):
         read_only_fields = ('joined_at', 'invited_by')
 
 
+class ProjectSerializer(serializers.ModelSerializer):
+    creator = UserSerializer(read_only=True)
+    organization = OrganizationSerializer(read_only=True)
+    flow_count = serializers.SerializerMethodField()
+    dashboard_count = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Project
+        fields = ('uuid', 'id', 'name', 'description', 'organization', 'creator', 
+                 'status', 'tags', 'metadata', 'auto_save', 'data_retention_days',
+                 'is_active', 'created_at', 'updated_at', 'flow_count', 'dashboard_count')
+        read_only_fields = ('creator', 'created_at', 'updated_at')
+    
+    def get_flow_count(self, obj):
+        return obj.get_flow_count()
+    
+    def get_dashboard_count(self, obj):
+        return obj.get_dashboard_count()
+
+
+class CreateProjectSerializer(serializers.ModelSerializer):
+    organization_id = serializers.IntegerField(write_only=True)
+    
+    class Meta:
+        model = Project
+        fields = ('name', 'description', 'organization_id', 'status', 'tags', 
+                 'metadata', 'auto_save', 'data_retention_days')
+    
+    def validate_organization_id(self, value):
+        try:
+            organization = Organization.objects.get(id=value)
+            # Check if user has admin access to this organization
+            user = self.context['request'].user
+            if not organization.members.filter(user=user, role='admin').exists():
+                raise serializers.ValidationError("You don't have admin access to this organization.")
+            return value
+        except Organization.DoesNotExist:
+            raise serializers.ValidationError("Organization not found.")
+    
+    def create(self, validated_data):
+        organization_id = validated_data.pop('organization_id')
+        organization = Organization.objects.get(id=organization_id)
+        
+        validated_data['organization'] = organization
+        validated_data['creator'] = self.context['request'].user
+        
+        return Project.objects.create(**validated_data)
+
+
 class DashboardTemplateSerializer(serializers.ModelSerializer):
     creator = UserSerializer(read_only=True)
     organization = OrganizationSerializer(read_only=True)
+    project = ProjectSerializer(read_only=True)
     admin_count = serializers.SerializerMethodField()
     user_count = serializers.SerializerMethodField()
     
     class Meta:
         model = DashboardTemplate
-        fields = ('uuid', 'id', 'name', 'description', 'organization', 'creator', 
+        fields = ('uuid', 'id', 'name', 'description', 'organization', 'project', 'creator', 
                  'layout', 'widgets', 'datasources', 'update_frequency', 
                  'connection_timeout', 'flow_config', 'is_active', 
                  'created_at', 'updated_at', 'admin_count', 'user_count')
@@ -166,10 +216,11 @@ class CreateOrganizationSerializer(serializers.ModelSerializer):
 
 class CreateDashboardTemplateSerializer(serializers.ModelSerializer):
     organization_id = serializers.IntegerField(write_only=True)
+    project_id = serializers.IntegerField(write_only=True, required=False)
     
     class Meta:
         model = DashboardTemplate
-        fields = ('name', 'description', 'organization_id', 'layout', 'widgets', 
+        fields = ('name', 'description', 'organization_id', 'project_id', 'layout', 'widgets', 
                  'datasources', 'update_frequency', 'connection_timeout', 'flow_config')
     
     def validate_organization_id(self, value):
@@ -183,11 +234,29 @@ class CreateDashboardTemplateSerializer(serializers.ModelSerializer):
         except Organization.DoesNotExist:
             raise serializers.ValidationError("Organization not found.")
     
+    def validate_project_id(self, value):
+        if value:
+            try:
+                project = Project.objects.get(id=value)
+                # Check if user has access to this project
+                user = self.context['request'].user
+                if not project.organization.members.filter(user=user, role__in=['admin', 'user']).exists():
+                    raise serializers.ValidationError("You don't have access to this project.")
+                return value
+            except Project.DoesNotExist:
+                raise serializers.ValidationError("Project not found.")
+        return value
+    
     def create(self, validated_data):
         organization_id = validated_data.pop('organization_id')
-        organization = Organization.objects.get(id=organization_id)
+        project_id = validated_data.pop('project_id', None)
         
+        organization = Organization.objects.get(id=organization_id)
         validated_data['organization'] = organization
         validated_data['creator'] = self.context['request'].user
+        
+        if project_id:
+            project = Project.objects.get(id=project_id)
+            validated_data['project'] = project
         
         return DashboardTemplate.objects.create(**validated_data) 

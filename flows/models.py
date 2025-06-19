@@ -9,6 +9,7 @@ class FlowDiagram(models.Model):
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True)
     owner = models.ForeignKey(User, on_delete=models.CASCADE)
+    project = models.ForeignKey('user.Project', on_delete=models.CASCADE, related_name='flows', null=True, blank=True)
     nodes = models.JSONField(default=list)  # Store React Flow nodes
     edges = models.JSONField(default=list)  # Store React Flow edges
     metadata = models.JSONField(default=dict)  # Additional flow metadata

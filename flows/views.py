@@ -15,7 +15,16 @@ from .serializers import FlowDiagramSerializer, FlowExecutionSerializer
         operation_id='list_flows',
         tags=['Flows'],
         summary='List Flow Diagrams',
-        description='Retrieve all flow diagrams for the current user'
+        description='Retrieve all flow diagrams for the current user. Optionally filter by project.',
+        parameters=[
+            {
+                'name': 'project_uuid',
+                'description': 'Filter flows by project UUID',
+                'required': False,
+                'type': 'string',
+                'in': 'query'
+            }
+        ]
     ),
     create=extend_schema(
         operation_id='create_flow',
@@ -54,10 +63,30 @@ class FlowDiagramViewSet(viewsets.ModelViewSet):
     lookup_field = 'uuid'
 
     def get_queryset(self):
-        return FlowDiagram.objects.filter(owner=self.request.user)
+        queryset = FlowDiagram.objects.filter(owner=self.request.user)
+        
+        # Filter by project if project_uuid is provided
+        project_uuid = self.request.query_params.get('project_uuid', None)
+        if project_uuid is not None:
+            queryset = queryset.filter(project__uuid=project_uuid)
+        
+        return queryset
 
     def perform_create(self, serializer):
-        serializer.save(owner=self.request.user)
+        # Get project from request data if provided
+        project_uuid = self.request.data.get('project_uuid', None)
+        if project_uuid:
+            from user.models import Project
+            try:
+                project = Project.objects.get(
+                    uuid=project_uuid,
+                    organization__members__user=self.request.user
+                )
+                serializer.save(owner=self.request.user, project=project)
+            except Project.DoesNotExist:
+                serializer.save(owner=self.request.user)
+        else:
+            serializer.save(owner=self.request.user)
 
     @extend_schema(
         operation_id='execute_flow',
@@ -114,6 +143,7 @@ class FlowDiagramViewSet(viewsets.ModelViewSet):
             name=f"{original_flow.name} (Copy)",
             description=original_flow.description,
             owner=request.user,
+            project=original_flow.project,  # Keep the same project
             nodes=original_flow.nodes,
             edges=original_flow.edges,
             metadata=original_flow.metadata,

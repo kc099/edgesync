@@ -15,6 +15,10 @@ urlpatterns = [
     path('organizations/', views.organizations_view, name='organizations'),
     path('organizations/<int:org_id>/', views.organization_detail_view, name='organization_detail'),
     
+    # Project endpoints
+    path('projects/', views.projects_view, name='projects'),
+    path('projects/<uuid:project_uuid>/', views.project_detail_view, name='project_detail'),
+    
     # Dashboard template endpoints
     path('dashboard-templates/', views.dashboard_templates_view, name='dashboard_templates'),
     path('dashboard-templates/<uuid:template_uuid>/', views.dashboard_template_detail_view, name='dashboard_template_detail'),
