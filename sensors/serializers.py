@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from .models import SensorData, MqttCluster, MqttTopic, MqttActivity
+from typing import List, Dict, Any
 
 class SensorDataSerializer(serializers.ModelSerializer):
     """Serializer for SensorData model"""
@@ -28,13 +29,71 @@ class MqttActivitySerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'timestamp']
 
 
+# New serializers for ACL and Device operations
+class ACLSerializer(serializers.Serializer):
+    """Serializer for MQTT ACL operations"""
+    id = serializers.CharField(read_only=True)
+    topicPattern = serializers.CharField(max_length=255)
+    accessType = serializers.IntegerField(min_value=1, max_value=4)
+    
+    def validate_accessType(self, value):
+        """Validate access type values"""
+        if value not in [1, 2, 3, 4]:  # 1=read, 2=write, 3=read/write, 4=subscribe
+            raise serializers.ValidationError("Access type must be 1(read), 2(write), 3(read/write), or 4(subscribe)")
+        return value
+
+
+class DeviceSerializer(serializers.Serializer):
+    """Serializer for Device operations"""
+    deviceId = serializers.CharField(max_length=100)
+    deviceName = serializers.CharField(max_length=255)
+    deviceType = serializers.CharField(max_length=100)
+    tenantId = serializers.CharField(max_length=100)
+    isActive = serializers.BooleanField(default=True)
+    createdAt = serializers.DateTimeField(read_only=True)
+    permissions = serializers.ListField(
+        child=serializers.CharField(max_length=20),
+        read_only=True
+    )
+
+
+class DeviceCreateSerializer(serializers.Serializer):
+    """Serializer for creating devices"""
+    deviceId = serializers.CharField(max_length=100)
+    deviceName = serializers.CharField(max_length=255)
+    deviceType = serializers.CharField(max_length=100)
+    tenantId = serializers.CharField(max_length=100)
+    permissions = serializers.ListField(
+        child=serializers.CharField(max_length=20),
+        required=False
+    )
+
+
+class DeviceUpdateSerializer(serializers.Serializer):
+    """Serializer for updating devices"""
+    deviceName = serializers.CharField(max_length=255, required=False)
+    isActive = serializers.BooleanField(required=False)
+
+
+class MqttPasswordSerializer(serializers.Serializer):
+    """Serializer for setting MQTT password"""
+    username = serializers.CharField(max_length=100, min_length=3)
+    password = serializers.CharField(max_length=255, min_length=8, write_only=True)
+    
+    def validate_username(self, value):
+        """Validate username format"""
+        if not value.replace('_', '').isalnum():
+            raise serializers.ValidationError("Username can only contain letters, numbers, and underscores")
+        return value
+
+
 class MqttClusterSerializer(serializers.ModelSerializer):
     """Serializer for MQTT Cluster model"""
     
     # Nested relations
     topics = MqttTopicSerializer(many=True, read_only=True)
     recent_activities = serializers.SerializerMethodField()
-    connection_url = serializers.ReadOnlyField()
+    connection_url = serializers.SerializerMethodField()
     
     class Meta:
         model = MqttCluster
@@ -49,10 +108,15 @@ class MqttClusterSerializer(serializers.ModelSerializer):
             'password': {'write_only': True}  # Never return password in API
         }
     
-    def get_recent_activities(self, obj):
+    def get_recent_activities(self, obj) -> List[Dict[str, Any]]:
         """Get recent activities for this cluster"""
         recent = obj.activities.order_by('-timestamp')[:10]
         return MqttActivitySerializer(recent, many=True).data
+    
+    def get_connection_url(self, obj) -> str:
+        """Get the connection URL for this cluster"""
+        protocol = "mqtts" if obj.use_ssl else "mqtt"
+        return f"{protocol}://{obj.host}:{obj.port}"
     
     def create(self, validated_data):
         # Set user from request context
@@ -63,7 +127,7 @@ class MqttClusterSerializer(serializers.ModelSerializer):
 class MqttClusterListSerializer(serializers.ModelSerializer):
     """Simplified serializer for cluster listing"""
     
-    connection_url = serializers.ReadOnlyField()
+    connection_url = serializers.SerializerMethodField()
     
     class Meta:
         model = MqttCluster
@@ -74,3 +138,8 @@ class MqttClusterListSerializer(serializers.ModelSerializer):
             'connection_url'
         ]
         read_only_fields = ['uuid', 'created_at', 'connection_url']
+    
+    def get_connection_url(self, obj) -> str:
+        """Get the connection URL for this cluster"""
+        protocol = "mqtts" if obj.use_ssl else "mqtt"
+        return f"{protocol}://{obj.host}:{obj.port}"

@@ -12,10 +12,10 @@ class FlowDiagramSerializer(serializers.ModelSerializer):
                  'version', 'tags']
         read_only_fields = ['created_at', 'updated_at', 'project_uuid', 'project_name']
     
-    def get_project_uuid(self, obj):
+    def get_project_uuid(self, obj) -> str:
         return str(obj.project.uuid) if obj.project else None
     
-    def get_project_name(self, obj):
+    def get_project_name(self, obj) -> str:
         return obj.project.name if obj.project else None
 
 class FlowExecutionSerializer(serializers.ModelSerializer):

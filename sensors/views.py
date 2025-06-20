@@ -11,7 +11,11 @@ from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiPara
 from drf_spectacular.openapi import OpenApiTypes
 from .models import SensorData, Device, MqttCluster, MqttTopic, MqttActivity
 from user.models import MosquittoUser, MosquittoACL, MosquittoSuperuser, UserProfile, DeviceHistory
-from .serializers import SensorDataSerializer, MqttClusterSerializer, MqttClusterListSerializer, MqttTopicSerializer, MqttActivitySerializer
+from .serializers import (
+    SensorDataSerializer, MqttClusterSerializer, MqttClusterListSerializer, 
+    MqttTopicSerializer, MqttActivitySerializer, ACLSerializer, DeviceSerializer,
+    DeviceCreateSerializer, DeviceUpdateSerializer, MqttPasswordSerializer
+)
 import json
 import secrets
 import string
@@ -139,6 +143,18 @@ def sensor_data_summary(request):
         'sensor_types': list(sensor_types)
     })
 
+@extend_schema(
+    operation_id='get_latest_sensor_data',
+    tags=['Sensor Data'],
+    summary='Get Latest Sensor Data',
+    description='Get the latest sensor data for each device/sensor combination',
+    responses={
+        200: {
+            'type': 'array',
+            'items': SensorDataSerializer
+        }
+    }
+)
 @api_view(['GET'])
 def latest_sensor_data(request):
     """API endpoint for getting the latest sensor data for each device/sensor combination"""
@@ -171,37 +187,25 @@ def device_registration(request):
 
 
 @extend_schema(
-    operation_id='list_create_devices',
+    operation_id='list_devices',
     tags=['Devices'],
-    summary='List or Create Devices',
-    description='Retrieve devices for the current user or register a new IoT device',
-    request={
-        'type': 'object',
-        'properties': {
-            'deviceId': {'type': 'string', 'description': 'Unique device identifier'},
-            'deviceName': {'type': 'string', 'description': 'Human-readable device name'},
-            'deviceType': {'type': 'string', 'description': 'Type of device (e.g., sensor, actuator)'},
-            'tenantId': {'type': 'string', 'description': 'Tenant/organization identifier'},
-            'permissions': {'type': 'array', 'items': {'type': 'string'}, 'description': 'Device permissions'}
-        },
-        'required': ['deviceId', 'deviceName', 'deviceType', 'tenantId']
-    },
+    summary='List Devices',
+    description='Retrieve devices for the current user',
     responses={
         200: {
             'type': 'array',
-            'items': {
-                'type': 'object',
-                'properties': {
-                    'deviceId': {'type': 'string'},
-                    'deviceName': {'type': 'string'},
-                    'deviceType': {'type': 'string'},
-                    'tenantId': {'type': 'string'},
-                    'isActive': {'type': 'boolean'},
-                    'createdAt': {'type': 'string', 'format': 'date-time'},
-                    'permissions': {'type': 'array', 'items': {'type': 'string'}}
-                }
-            }
-        },
+            'items': DeviceSerializer
+        }
+    },
+    methods=['GET']
+)
+@extend_schema(
+    operation_id='create_device',
+    tags=['Devices'],
+    summary='Create Device',
+    description='Register a new IoT device',
+    request=DeviceCreateSerializer,
+    responses={
         201: {
             'type': 'object',
             'description': 'Device created successfully'
@@ -212,7 +216,8 @@ def device_registration(request):
                 'error': {'type': 'string'}
             }
         }
-    }
+    },
+    methods=['POST']
 )
 @api_view(['GET', 'POST'])
 @permission_classes([IsAuthenticated])
@@ -373,6 +378,71 @@ def device_list_create(request):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+@extend_schema(
+    operation_id='get_device',
+    tags=['Devices'],
+    summary='Get Device',
+    description='Retrieve a specific device by ID',
+    responses={
+        200: DeviceSerializer,
+        404: {
+            'type': 'object',
+            'properties': {
+                'error': {'type': 'string'}
+            }
+        }
+    },
+    methods=['GET']
+)
+@extend_schema(
+    operation_id='update_device',
+    tags=['Devices'],
+    summary='Update Device',
+    description='Update a specific device',
+    request=DeviceUpdateSerializer,
+    responses={
+        200: {
+            'type': 'object',
+            'properties': {
+                'message': {'type': 'string'}
+            }
+        },
+        400: {
+            'type': 'object',
+            'properties': {
+                'error': {'type': 'string'}
+            }
+        },
+        404: {
+            'type': 'object',
+            'properties': {
+                'error': {'type': 'string'}
+            }
+        }
+    },
+    methods=['PATCH']
+)
+@extend_schema(
+    operation_id='delete_device',
+    tags=['Devices'],
+    summary='Delete Device',
+    description='Delete a specific device',
+    responses={
+        200: {
+            'type': 'object',
+            'properties': {
+                'message': {'type': 'string'}
+            }
+        },
+        404: {
+            'type': 'object',
+            'properties': {
+                'error': {'type': 'string'}
+            }
+        }
+    },
+    methods=['DELETE']
+)
 @api_view(['GET', 'PATCH', 'DELETE'])
 @permission_classes([IsAuthenticated])
 def device_detail(request, device_id):
@@ -474,6 +544,28 @@ def device_detail(request, device_id):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+@extend_schema(
+    operation_id='set_mqtt_password',
+    tags=['MQTT'],
+    summary='Set MQTT Password',
+    description='Set user MQTT credentials',
+    request=MqttPasswordSerializer,
+    responses={
+        200: {
+            'type': 'object',
+            'properties': {
+                'username': {'type': 'string'},
+                'message': {'type': 'string'}
+            }
+        },
+        400: {
+            'type': 'object',
+            'properties': {
+                'error': {'type': 'string'}
+            }
+        }
+    }
+)
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def set_mqtt_password(request):
@@ -584,8 +676,47 @@ def set_mqtt_password(request):
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-
-
+@extend_schema(
+    operation_id='list_acl',
+    tags=['MQTT ACL'],
+    summary='List ACL Entries',
+    description='List MQTT ACL entries for the current user',
+    responses={
+        200: {
+            'type': 'array',
+            'items': ACLSerializer
+        },
+        400: {
+            'type': 'object',
+            'properties': {
+                'error': {'type': 'string'}
+            }
+        }
+    },
+    methods=['GET']
+)
+@extend_schema(
+    operation_id='create_acl',
+    tags=['MQTT ACL'],
+    summary='Create ACL Entry',
+    description='Create a new MQTT ACL entry',
+    request=ACLSerializer,
+    responses={
+        201: {
+            'type': 'object',
+            'properties': {
+                'id': {'type': 'string'}
+            }
+        },
+        400: {
+            'type': 'object',
+            'properties': {
+                'error': {'type': 'string'}
+            }
+        }
+    },
+    methods=['POST']
+)
 @api_view(['GET', 'POST'])
 @permission_classes([IsAuthenticated])
 def acl_list_create(request):
@@ -653,6 +784,35 @@ def acl_list_create(request):
             print(f"Error creating ACL: {e}")
             return Response({'error': 'Failed to create ACL'}, status=500)
 
+@extend_schema(
+    operation_id='delete_acl',
+    tags=['MQTT ACL'],
+    summary='Delete ACL Entry',
+    description='Delete a specific MQTT ACL entry',
+    responses={
+        204: {
+            'description': 'ACL deleted successfully'
+        },
+        400: {
+            'type': 'object',
+            'properties': {
+                'error': {'type': 'string'}
+            }
+        },
+        403: {
+            'type': 'object',
+            'properties': {
+                'error': {'type': 'string'}
+            }
+        },
+        404: {
+            'type': 'object',
+            'properties': {
+                'error': {'type': 'string'}
+            }
+        }
+    }
+)
 @api_view(['DELETE'])
 @permission_classes([IsAuthenticated])
 def acl_detail(request, acl_id):
@@ -819,9 +979,41 @@ class MqttClusterViewSet(viewsets.ModelViewSet):
         return super().destroy(request, *args, **kwargs)
 
 
-
-
-
+@extend_schema(
+    operation_id='test_mqtt_connection',
+    tags=['MQTT'],
+    summary='Test MQTT Connection',
+    description='Test connection to an MQTT cluster',
+    request={
+        'type': 'object',
+        'properties': {
+            'username': {'type': 'string', 'description': 'MQTT username'},
+            'password': {'type': 'string', 'description': 'MQTT password'}
+        }
+    },
+    responses={
+        200: {
+            'type': 'object',
+            'properties': {
+                'status': {'type': 'string'},
+                'message': {'type': 'string'},
+                'details': {'type': 'object'}
+            }
+        },
+        400: {
+            'type': 'object',
+            'properties': {
+                'error': {'type': 'string'}
+            }
+        },
+        404: {
+            'type': 'object',
+            'properties': {
+                'error': {'type': 'string'}
+            }
+        }
+    }
+)
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def mqtt_cluster_test_connection(request, cluster_uuid):
@@ -934,17 +1126,22 @@ def mqtt_cluster_test_connection(request, cluster_uuid):
         }, status=500)
 
 
-
-
-
-
-
-
-
-
-
-
-
+@extend_schema(
+    operation_id='get_user_mqtt_info',
+    tags=['MQTT'],
+    summary='Get User MQTT Info',
+    description='Get current user MQTT connection information',
+    responses={
+        200: {
+            'type': 'object',
+            'properties': {
+                'mqtt_username': {'type': 'string'},
+                'hosted_cluster': {'type': 'object'},
+                'status': {'type': 'string'}
+            }
+        }
+    }
+)
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def user_mqtt_info(request):
@@ -992,6 +1189,26 @@ def user_mqtt_info(request):
             'error': 'Failed to load MQTT information'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+@extend_schema(
+    operation_id='delete_hosted_cluster',
+    tags=['MQTT'],
+    summary='Delete Hosted Cluster',
+    description='Delete the hosted MQTT cluster and clean up credentials',
+    responses={
+        200: {
+            'type': 'object',
+            'properties': {
+                'message': {'type': 'string'}
+            }
+        },
+        404: {
+            'type': 'object',
+            'properties': {
+                'error': {'type': 'string'}
+            }
+        }
+    }
+)
 @api_view(['DELETE'])
 @permission_classes([IsAuthenticated])
 def delete_hosted_cluster(request):

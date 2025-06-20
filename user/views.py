@@ -366,19 +366,10 @@ def profile_view(request):
 # Organization Management Views
 
 @extend_schema(
-    operation_id='list_create_organizations',
+    operation_id='list_organizations',
     tags=['Organizations'],
-    summary='List or Create Organizations',
-    description='Retrieve organizations for the current user or create a new organization',
-    request={
-        'type': 'object',
-        'properties': {
-            'name': {'type': 'string', 'description': 'Organization name'},
-            'description': {'type': 'string', 'description': 'Organization description'},
-            'settings': {'type': 'object', 'description': 'Organization settings'}
-        },
-        'required': ['name']
-    },
+    summary='List Organizations',
+    description='Retrieve organizations for the current user',
     responses={
         200: {
             'type': 'object',
@@ -386,7 +377,17 @@ def profile_view(request):
                 'organizations': {'type': 'array', 'items': {'type': 'object'}},
                 'status': {'type': 'string'}
             }
-        },
+        }
+    },
+    methods=['GET']
+)
+@extend_schema(
+    operation_id='create_organization',
+    tags=['Organizations'],
+    summary='Create Organization',
+    description='Create a new organization',
+    request=CreateOrganizationSerializer,
+    responses={
         201: {
             'type': 'object',
             'properties': {
@@ -401,7 +402,8 @@ def profile_view(request):
                 'status': {'type': 'string'}
             }
         }
-    }
+    },
+    methods=['POST']
 )
 @api_view(['GET', 'POST'])
 @permission_classes([IsAuthenticated])
@@ -437,6 +439,104 @@ def organizations_view(request):
             }, status=status.HTTP_400_BAD_REQUEST)
 
 
+@extend_schema(
+    operation_id='get_organization',
+    tags=['Organizations'],
+    summary='Get Organization',
+    description='Retrieve a specific organization by ID',
+    responses={
+        200: {
+            'type': 'object',
+            'properties': {
+                'organization': {'type': 'object'},
+                'status': {'type': 'string'}
+            }
+        },
+        403: {
+            'type': 'object',
+            'properties': {
+                'error': {'type': 'string'},
+                'status': {'type': 'string'}
+            }
+        },
+        404: {
+            'type': 'object',
+            'properties': {
+                'error': {'type': 'string'},
+                'status': {'type': 'string'}
+            }
+        }
+    },
+    methods=['GET']
+)
+@extend_schema(
+    operation_id='update_organization',
+    tags=['Organizations'],
+    summary='Update Organization',
+    description='Update a specific organization',
+    request=OrganizationSerializer,
+    responses={
+        200: {
+            'type': 'object',
+            'properties': {
+                'organization': {'type': 'object'},
+                'status': {'type': 'string'}
+            }
+        },
+        400: {
+            'type': 'object',
+            'properties': {
+                'error': {'type': 'object'},
+                'status': {'type': 'string'}
+            }
+        },
+        403: {
+            'type': 'object',
+            'properties': {
+                'error': {'type': 'string'},
+                'status': {'type': 'string'}
+            }
+        },
+        404: {
+            'type': 'object',
+            'properties': {
+                'error': {'type': 'string'},
+                'status': {'type': 'string'}
+            }
+        }
+    },
+    methods=['PUT']
+)
+@extend_schema(
+    operation_id='delete_organization',
+    tags=['Organizations'],
+    summary='Delete Organization',
+    description='Delete a specific organization',
+    responses={
+        200: {
+            'type': 'object',
+            'properties': {
+                'message': {'type': 'string'},
+                'status': {'type': 'string'}
+            }
+        },
+        403: {
+            'type': 'object',
+            'properties': {
+                'error': {'type': 'string'},
+                'status': {'type': 'string'}
+            }
+        },
+        404: {
+            'type': 'object',
+            'properties': {
+                'error': {'type': 'string'},
+                'status': {'type': 'string'}
+            }
+        }
+    },
+    methods=['DELETE']
+)
 @api_view(['GET', 'PUT', 'DELETE'])
 @permission_classes([IsAuthenticated])
 def organization_detail_view(request, org_id):
@@ -493,6 +593,46 @@ def organization_detail_view(request, org_id):
         }, status=status.HTTP_404_NOT_FOUND)
 
 
+@extend_schema(
+    operation_id='list_dashboard_templates',
+    tags=['Dashboard Templates'],
+    summary='List Dashboard Templates',
+    description='Retrieve dashboard templates for the current user',
+    responses={
+        200: {
+            'type': 'object',
+            'properties': {
+                'templates': {'type': 'array', 'items': {'type': 'object'}},
+                'status': {'type': 'string'}
+            }
+        }
+    },
+    methods=['GET']
+)
+@extend_schema(
+    operation_id='create_dashboard_template',
+    tags=['Dashboard Templates'], 
+    summary='Create Dashboard Template',
+    description='Create a new dashboard template',
+    request=CreateDashboardTemplateSerializer,
+    responses={
+        201: {
+            'type': 'object',
+            'properties': {
+                'template': {'type': 'object'},
+                'status': {'type': 'string'}
+            }
+        },
+        400: {
+            'type': 'object',
+            'properties': {
+                'error': {'type': 'object'},
+                'status': {'type': 'string'}
+            }
+        }
+    },
+    methods=['POST']
+)
 @api_view(['GET', 'POST'])
 @permission_classes([IsAuthenticated])
 def dashboard_templates_view(request):
@@ -529,6 +669,104 @@ def dashboard_templates_view(request):
             }, status=status.HTTP_400_BAD_REQUEST)
 
 
+@extend_schema(
+    operation_id='get_dashboard_template',
+    tags=['Dashboard Templates'],
+    summary='Get Dashboard Template',
+    description='Retrieve a specific dashboard template by UUID',
+    responses={
+        200: {
+            'type': 'object',
+            'properties': {
+                'template': {'type': 'object'},
+                'status': {'type': 'string'}
+            }
+        },
+        403: {
+            'type': 'object',
+            'properties': {
+                'error': {'type': 'string'},
+                'status': {'type': 'string'}
+            }
+        },
+        404: {
+            'type': 'object',
+            'properties': {
+                'error': {'type': 'string'},
+                'status': {'type': 'string'}
+            }
+        }
+    },
+    methods=['GET']
+)
+@extend_schema(
+    operation_id='update_dashboard_template',
+    tags=['Dashboard Templates'],
+    summary='Update Dashboard Template',
+    description='Update a specific dashboard template',
+    request=DashboardTemplateSerializer,
+    responses={
+        200: {
+            'type': 'object',
+            'properties': {
+                'template': {'type': 'object'},
+                'status': {'type': 'string'}
+            }
+        },
+        400: {
+            'type': 'object',
+            'properties': {
+                'error': {'type': 'object'},
+                'status': {'type': 'string'}
+            }
+        },
+        403: {
+            'type': 'object',
+            'properties': {
+                'error': {'type': 'string'},
+                'status': {'type': 'string'}
+            }
+        },
+        404: {
+            'type': 'object',
+            'properties': {
+                'error': {'type': 'string'},
+                'status': {'type': 'string'}
+            }
+        }
+    },
+    methods=['PUT']
+)
+@extend_schema(
+    operation_id='delete_dashboard_template',
+    tags=['Dashboard Templates'],
+    summary='Delete Dashboard Template',
+    description='Delete a specific dashboard template',
+    responses={
+        200: {
+            'type': 'object',
+            'properties': {
+                'message': {'type': 'string'},
+                'status': {'type': 'string'}
+            }
+        },
+        403: {
+            'type': 'object',
+            'properties': {
+                'error': {'type': 'string'},
+                'status': {'type': 'string'}
+            }
+        },
+        404: {
+            'type': 'object',
+            'properties': {
+                'error': {'type': 'string'},
+                'status': {'type': 'string'}
+            }
+        }
+    },
+    methods=['DELETE']
+)
 @api_view(['GET', 'PUT', 'DELETE'])
 @permission_classes([IsAuthenticated])
 def dashboard_template_detail_view(request, template_uuid):
@@ -599,24 +837,10 @@ def dashboard_template_detail_view(request, template_uuid):
 
 
 @extend_schema(
-    operation_id='list_create_projects',
+    operation_id='list_projects',
     tags=['Projects'],
-    summary='List or Create Projects',
-    description='Retrieve projects for the current user or create a new project',
-    request={
-        'type': 'object',
-        'properties': {
-            'name': {'type': 'string', 'description': 'Project name'},
-            'description': {'type': 'string', 'description': 'Project description'},
-            'organization_id': {'type': 'integer', 'description': 'Organization ID'},
-            'status': {'type': 'string', 'description': 'Project status'},
-            'tags': {'type': 'array', 'items': {'type': 'string'}, 'description': 'Project tags'},
-            'metadata': {'type': 'object', 'description': 'Project metadata'},
-            'auto_save': {'type': 'boolean', 'description': 'Auto-save enabled'},
-            'data_retention_days': {'type': 'integer', 'description': 'Data retention period'}
-        },
-        'required': ['name', 'organization_id']
-    },
+    summary='List Projects',
+    description='Retrieve projects for the current user',
     responses={
         200: {
             'type': 'object',
@@ -624,7 +848,17 @@ def dashboard_template_detail_view(request, template_uuid):
                 'projects': {'type': 'array', 'items': {'type': 'object'}},
                 'status': {'type': 'string'}
             }
-        },
+        }
+    },
+    methods=['GET']
+)
+@extend_schema(
+    operation_id='create_project',
+    tags=['Projects'],
+    summary='Create Project',
+    description='Create a new project',
+    request=CreateProjectSerializer,
+    responses={
         201: {
             'type': 'object',
             'properties': {
@@ -639,7 +873,8 @@ def dashboard_template_detail_view(request, template_uuid):
                 'status': {'type': 'string'}
             }
         }
-    }
+    },
+    methods=['POST']
 )
 @api_view(['GET', 'POST'])
 @permission_classes([IsAuthenticated])
@@ -684,6 +919,104 @@ def projects_view(request):
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+@extend_schema(
+    operation_id='get_project',
+    tags=['Projects'],
+    summary='Get Project',
+    description='Retrieve a specific project by UUID',
+    responses={
+        200: {
+            'type': 'object',
+            'properties': {
+                'project': {'type': 'object'},
+                'status': {'type': 'string'}
+            }
+        },
+        403: {
+            'type': 'object',
+            'properties': {
+                'error': {'type': 'string'},
+                'status': {'type': 'string'}
+            }
+        },
+        404: {
+            'type': 'object',
+            'properties': {
+                'error': {'type': 'string'},
+                'status': {'type': 'string'}
+            }
+        }
+    },
+    methods=['GET']
+)
+@extend_schema(
+    operation_id='update_project',
+    tags=['Projects'],
+    summary='Update Project',
+    description='Update a specific project',
+    request=ProjectSerializer,
+    responses={
+        200: {
+            'type': 'object',
+            'properties': {
+                'project': {'type': 'object'},
+                'status': {'type': 'string'}
+            }
+        },
+        400: {
+            'type': 'object',
+            'properties': {
+                'error': {'type': 'object'},
+                'status': {'type': 'string'}
+            }
+        },
+        403: {
+            'type': 'object',
+            'properties': {
+                'error': {'type': 'string'},
+                'status': {'type': 'string'}
+            }
+        },
+        404: {
+            'type': 'object',
+            'properties': {
+                'error': {'type': 'string'},
+                'status': {'type': 'string'}
+            }
+        }
+    },
+    methods=['PUT']
+)
+@extend_schema(
+    operation_id='delete_project',
+    tags=['Projects'],
+    summary='Delete Project',
+    description='Delete a specific project',
+    responses={
+        200: {
+            'type': 'object',
+            'properties': {
+                'message': {'type': 'string'},
+                'status': {'type': 'string'}
+            }
+        },
+        403: {
+            'type': 'object',
+            'properties': {
+                'error': {'type': 'string'},
+                'status': {'type': 'string'}
+            }
+        },
+        404: {
+            'type': 'object',
+            'properties': {
+                'error': {'type': 'string'},
+                'status': {'type': 'string'}
+            }
+        }
+    },
+    methods=['DELETE']
+)
 @api_view(['GET', 'PUT', 'DELETE'])
 @permission_classes([IsAuthenticated])
 def project_detail_view(request, project_uuid):
