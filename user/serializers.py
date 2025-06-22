@@ -87,11 +87,12 @@ class OrganizationSerializer(serializers.ModelSerializer):
     owner = UserSerializer(read_only=True)
     admin_count = serializers.SerializerMethodField()
     user_count = serializers.SerializerMethodField()
+    project_count = serializers.SerializerMethodField()
     
     class Meta:
         model = Organization
         fields = ('id', 'name', 'description', 'owner', 'slug', 'is_active', 
-                 'created_at', 'updated_at', 'admin_count', 'user_count')
+                 'created_at', 'updated_at', 'admin_count', 'user_count', 'project_count')
         read_only_fields = ('owner', 'created_at', 'updated_at')
     
     def get_admin_count(self, obj):
@@ -99,6 +100,9 @@ class OrganizationSerializer(serializers.ModelSerializer):
     
     def get_user_count(self, obj):
         return obj.get_user_count()
+    
+    def get_project_count(self, obj):
+        return obj.get_project_count()
 
 
 class OrganizationMemberSerializer(serializers.ModelSerializer):

@@ -67,6 +67,10 @@ class Organization(models.Model):
     def get_user_count(self):
         """Get number of user members"""
         return self.members.filter(role='user').count()
+    
+    def get_project_count(self):
+        """Get number of projects in this organization"""
+        return self.projects.count()
 
 
 class OrganizationMember(models.Model):
