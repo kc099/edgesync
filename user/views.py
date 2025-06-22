@@ -580,15 +580,257 @@ def organization_detail_view(request, org_id):
                     'status': 'error'
                 }, status=status.HTTP_403_FORBIDDEN)
             
+            # Set related projects to inactive instead of deleting them
+            organization.projects.update(status='inactive', is_active=False)
+            
+            # Set related dashboard templates to inactive
+            organization.dashboard_templates.update(is_active=False)
+            
+            # Now delete the organization (members will be cascade deleted)
             organization.delete()
             return Response({
-                'message': 'Organization deleted successfully',
+                'message': 'Organization deleted successfully. Related projects and dashboards have been set to inactive.',
                 'status': 'success'
             })
     
     except Organization.DoesNotExist:
         return Response({
             'error': 'Organization not found',
+            'status': 'error'
+        }, status=status.HTTP_404_NOT_FOUND)
+
+
+@extend_schema(
+    operation_id='list_organization_members',
+    tags=['Organizations'],
+    summary='List Organization Members',
+    description='Retrieve members of a specific organization',
+    responses={
+        200: {
+            'type': 'object',
+            'properties': {
+                'members': {'type': 'array', 'items': {'type': 'object'}},
+                'status': {'type': 'string'}
+            }
+        },
+        403: {
+            'type': 'object',
+            'properties': {
+                'error': {'type': 'string'},
+                'status': {'type': 'string'}
+            }
+        },
+        404: {
+            'type': 'object',
+            'properties': {
+                'error': {'type': 'string'},
+                'status': {'type': 'string'}
+            }
+        }
+    },
+    methods=['GET']
+)
+@extend_schema(
+    operation_id='add_organization_member',
+    tags=['Organizations'],
+    summary='Add Organization Member',
+    description='Add a new member to the organization',
+    request={
+        'type': 'object',
+        'properties': {
+            'email': {'type': 'string', 'description': 'User email to add'},
+            'role': {'type': 'string', 'description': 'Member role (admin/user)', 'enum': ['admin', 'user']}
+        },
+        'required': ['email', 'role']
+    },
+    responses={
+        201: {
+            'type': 'object',
+            'properties': {
+                'member': {'type': 'object'},
+                'status': {'type': 'string'}
+            }
+        },
+        400: {
+            'type': 'object',
+            'properties': {
+                'error': {'type': 'string'},
+                'status': {'type': 'string'}
+            }
+        },
+        403: {
+            'type': 'object',
+            'properties': {
+                'error': {'type': 'string'},
+                'status': {'type': 'string'}
+            }
+        },
+        404: {
+            'type': 'object',
+            'properties': {
+                'error': {'type': 'string'},
+                'status': {'type': 'string'}
+            }
+        }
+    },
+    methods=['POST']
+)
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated])
+def organization_members_view(request, org_id):
+    """List organization members or add new member"""
+    try:
+        organization = Organization.objects.get(id=org_id)
+        
+        # Check if user has admin access
+        if not organization.members.filter(user=request.user, role='admin').exists() and organization.owner != request.user:
+            return Response({
+                'error': 'You do not have admin access to this organization',
+                'status': 'error'
+            }, status=status.HTTP_403_FORBIDDEN)
+        
+        if request.method == 'GET':
+            # Get all members including the owner
+            members = list(organization.members.all())
+            
+            # Add owner as a special member entry if not already in members
+            owner_is_member = any(member.user.id == organization.owner.id for member in members)
+            if not owner_is_member:
+                # Create a temporary member object for the owner
+                owner_member = OrganizationMember(
+                    organization=organization,
+                    user=organization.owner,
+                    role='admin',
+                    joined_at=organization.created_at
+                )
+                members.insert(0, owner_member)
+            
+            serializer = OrganizationMemberSerializer(members, many=True)
+            return Response({
+                'members': serializer.data,
+                'status': 'success'
+            })
+        
+        elif request.method == 'POST':
+            email = request.data.get('email')
+            role = request.data.get('role', 'user')
+            
+            if not email:
+                return Response({
+                    'error': 'Email is required',
+                    'status': 'error'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            try:
+                user_to_add = User.objects.get(email=email)
+            except User.DoesNotExist:
+                return Response({
+                    'error': 'User with this email does not exist',
+                    'status': 'error'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Check if user is already a member
+            if organization.members.filter(user=user_to_add).exists():
+                return Response({
+                    'error': 'User is already a member of this organization',
+                    'status': 'error'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Check if trying to add the owner
+            if user_to_add == organization.owner:
+                return Response({
+                    'error': 'User is already the owner of this organization',
+                    'status': 'error'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Create the membership
+            member = OrganizationMember.objects.create(
+                organization=organization,
+                user=user_to_add,
+                role=role,
+                invited_by=request.user
+            )
+            
+            serializer = OrganizationMemberSerializer(member)
+            return Response({
+                'member': serializer.data,
+                'status': 'success'
+            }, status=status.HTTP_201_CREATED)
+    
+    except Organization.DoesNotExist:
+        return Response({
+            'error': 'Organization not found',
+            'status': 'error'
+        }, status=status.HTTP_404_NOT_FOUND)
+
+
+@extend_schema(
+    operation_id='remove_organization_member',
+    tags=['Organizations'],
+    summary='Remove Organization Member',
+    description='Remove a member from the organization',
+    responses={
+        200: {
+            'type': 'object',
+            'properties': {
+                'message': {'type': 'string'},
+                'status': {'type': 'string'}
+            }
+        },
+        403: {
+            'type': 'object',
+            'properties': {
+                'error': {'type': 'string'},
+                'status': {'type': 'string'}
+            }
+        },
+        404: {
+            'type': 'object',
+            'properties': {
+                'error': {'type': 'string'},
+                'status': {'type': 'string'}
+            }
+        }
+    },
+    methods=['DELETE']
+)
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def organization_member_detail_view(request, org_id, member_id):
+    """Remove organization member"""
+    try:
+        organization = Organization.objects.get(id=org_id)
+        member = OrganizationMember.objects.get(id=member_id, organization=organization)
+        
+        # Check if user has admin access
+        if not organization.members.filter(user=request.user, role='admin').exists() and organization.owner != request.user:
+            return Response({
+                'error': 'You do not have admin access to this organization',
+                'status': 'error'
+            }, status=status.HTTP_403_FORBIDDEN)
+        
+        # Cannot remove the owner
+        if member.user == organization.owner:
+            return Response({
+                'error': 'Cannot remove the organization owner',
+                'status': 'error'
+            }, status=status.HTTP_403_FORBIDDEN)
+        
+        member.delete()
+        return Response({
+            'message': 'Member removed successfully',
+            'status': 'success'
+        })
+    
+    except Organization.DoesNotExist:
+        return Response({
+            'error': 'Organization not found',
+            'status': 'error'
+        }, status=status.HTTP_404_NOT_FOUND)
+    
+    except OrganizationMember.DoesNotExist:
+        return Response({
+            'error': 'Member not found',
             'status': 'error'
         }, status=status.HTTP_404_NOT_FOUND)
 

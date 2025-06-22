@@ -201,11 +201,32 @@ class TemplatePermissionSerializer(serializers.ModelSerializer):
 class CreateOrganizationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Organization
-        fields = ('name', 'description', 'slug')
+        fields = ('name', 'description')
+    
+    def validate_name(self, value):
+        if Organization.objects.filter(name=value).exists():
+            raise serializers.ValidationError("An organization with this name already exists.")
+        return value
     
     def create(self, validated_data):
+        import time
+        from django.utils.text import slugify
+        
         # Set the owner to the current user
         validated_data['owner'] = self.context['request'].user
+        
+        # Auto-generate unique slug
+        base_slug = slugify(validated_data['name'])
+        if not base_slug:  # If name contains no valid characters for slug
+            base_slug = f"org-{int(time.time() * 1000)}"
+        
+        slug = base_slug
+        counter = 1
+        while Organization.objects.filter(slug=slug).exists():
+            slug = f"{base_slug}-{counter}"
+            counter += 1
+        
+        validated_data['slug'] = slug
         organization = Organization.objects.create(**validated_data)
         
         # Automatically add the owner as an admin member

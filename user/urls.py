@@ -14,6 +14,8 @@ urlpatterns = [
     # Organization endpoints
     path('organizations/', views.organizations_view, name='organizations'),
     path('organizations/<int:org_id>/', views.organization_detail_view, name='organization_detail'),
+    path('organizations/<int:org_id>/members/', views.organization_members_view, name='organization_members'),
+    path('organizations/<int:org_id>/members/<int:member_id>/', views.organization_member_detail_view, name='organization_member_detail'),
     
     # Project endpoints
     path('projects/', views.projects_view, name='projects'),
