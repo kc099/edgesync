@@ -8,10 +8,13 @@ app_name = 'sensors'
 # Router for ViewSets
 router = DefaultRouter()
 router.register(r'mqtt-clusters', views.MqttClusterViewSet, basename='mqtt-cluster')
+router.register(r'devices', views.DeviceViewSet, basename='device')
 
 urlpatterns = [
-    # MQTT Cluster Management  
+    # API routes from router
     path('api/', include(router.urls)),
+    
+    # MQTT Cluster Management  
     path('api/mqtt-clusters/<uuid:cluster_uuid>/test/', views.mqtt_cluster_test_connection, name='mqtt-cluster-test'),
     
     # MQTT User Management
@@ -20,4 +23,7 @@ urlpatterns = [
     path('api/mqtt/delete-hosted/', views.delete_hosted_cluster, name='delete-hosted-cluster'),
     path('api/acls/', views.acl_list_create, name='acl-list-create'),
     path('api/acls/<str:acl_id>/', views.acl_detail, name='acl-detail'),
+    
+    # Device Management
+    path('api/devices/<uuid:device_uuid>/regenerate-token/', views.regenerate_device_token, name='device-regenerate-token'),
 ] 

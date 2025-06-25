@@ -3,18 +3,19 @@ from django.http import JsonResponse
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework import generics, filters, status, viewsets
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiParameter
 from drf_spectacular.openapi import OpenApiTypes
-from .models import MqttCluster, MqttTopic, MqttActivity
-from user.models import MosquittoUser, UserProfile
+from .models import MqttCluster, MqttTopic, MqttActivity, Device
+from user.models import MosquittoUser, UserProfile, Organization
 from .serializers import (
     MqttClusterSerializer, MqttClusterListSerializer, 
     MqttTopicSerializer, MqttActivitySerializer, ACLSerializer,
-    MqttPasswordSerializer
+    MqttPasswordSerializer, DeviceSerializer, DeviceListSerializer,
+    DeviceCreateSerializer, DeviceUpdateSerializer, DeviceProjectAssignmentSerializer
 )
 import json
 import secrets
@@ -763,3 +764,276 @@ def delete_hosted_cluster(request):
     except Exception as e:
         print(f"Error deleting hosted cluster data: {e}")
         return Response({'error': 'Failed to delete hosted cluster data'}, status=500)
+
+
+# Device Management Views
+
+@extend_schema_view(
+    list=extend_schema(
+        operation_id='list_devices',
+        tags=['Devices'],
+        summary='List Devices',
+        description='Retrieve all devices for the current user\'s organizations. Can be filtered by organization or project.',
+        parameters=[
+            OpenApiParameter(
+                name='organization',
+                description='Filter devices by organization ID',
+                required=False,
+                type=OpenApiTypes.INT,
+                location=OpenApiParameter.QUERY,
+            ),
+            OpenApiParameter(
+                name='project_uuid',
+                description='Filter devices by project UUID',
+                required=False,
+                type=OpenApiTypes.UUID,
+                location=OpenApiParameter.QUERY,
+            ),
+        ]
+    ),
+    create=extend_schema(
+        operation_id='create_device',
+        tags=['Devices'],
+        summary='Create Device',
+        description='Create a new IoT device with authentication token'
+    ),
+    retrieve=extend_schema(
+        operation_id='get_device',
+        tags=['Devices'],
+        summary='Get Device',
+        description='Retrieve a specific device by UUID'
+    ),
+    update=extend_schema(
+        operation_id='update_device',
+        tags=['Devices'],
+        summary='Update Device',
+        description='Update a device configuration'
+    ),
+    partial_update=extend_schema(
+        operation_id='partial_update_device',
+        tags=['Devices'],
+        summary='Partially Update Device',
+        description='Partially update a device configuration'
+    ),
+    destroy=extend_schema(
+        operation_id='delete_device',
+        tags=['Devices'],
+        summary='Delete Device',
+        description='Delete a device and clean up associated data'
+    ),
+)
+class DeviceViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing IoT devices.
+    Provides CRUD operations and project assignment functionality.
+    """
+    
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['status', 'is_active', 'organization']
+    search_fields = ['name', 'description']
+    ordering_fields = ['name', 'created_at', 'updated_at', 'last_seen']
+    ordering = ['-created_at']
+    lookup_field = 'uuid'
+    
+    def get_queryset(self):
+        user = self.request.user
+        # Get organizations where user is a member
+        user_orgs = Organization.objects.filter(members__user=user)
+        queryset = Device.objects.filter(organization__in=user_orgs)
+        
+        # Filter by organization if specified
+        org_id = self.request.query_params.get('organization')
+        if org_id:
+            queryset = queryset.filter(organization_id=org_id)
+        
+        # Filter by project if specified
+        project_uuid = self.request.query_params.get('project_uuid')
+        if project_uuid:
+            queryset = queryset.filter(projects__uuid=project_uuid)
+        
+        return queryset.distinct()
+    
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return DeviceListSerializer
+        elif self.action == 'create':
+            return DeviceCreateSerializer
+        elif self.action in ['update', 'partial_update']:
+            return DeviceUpdateSerializer
+        return DeviceSerializer
+    
+    def perform_create(self, serializer):
+        # Validate organization membership
+        organization = serializer.validated_data.get('organization')
+        if not organization.members.filter(user=self.request.user).exists():
+            raise serializers.ValidationError("You are not a member of this organization")
+        
+        serializer.save(creator=self.request.user)
+    
+    def perform_update(self, serializer):
+        # Check if user can modify this device
+        device = self.get_object()
+        if not device.organization.members.filter(user=self.request.user).exists():
+            raise serializers.ValidationError("You don't have permission to modify this device")
+        
+        serializer.save()
+    
+    def perform_destroy(self, instance):
+        # Check if user can delete this device
+        if not instance.organization.members.filter(user=self.request.user).exists():
+            raise serializers.ValidationError("You don't have permission to delete this device")
+        
+        # TODO: Add cleanup for associated sensor data if needed
+        instance.delete()
+    
+    @extend_schema(
+        operation_id='assign_device_to_project',
+        tags=['Devices'],
+        summary='Assign Device to Project',
+        description='Assign a device to a project within the same organization',
+        request=DeviceProjectAssignmentSerializer,
+        responses={
+            200: {
+                'type': 'object',
+                'properties': {
+                    'message': {'type': 'string'},
+                    'device_uuid': {'type': 'string'},
+                    'project_uuid': {'type': 'string'}
+                }
+            },
+            400: {'type': 'object', 'properties': {'error': {'type': 'string'}}},
+            403: {'type': 'object', 'properties': {'error': {'type': 'string'}}},
+            404: {'type': 'object', 'properties': {'error': {'type': 'string'}}}
+        }
+    )
+    @action(detail=True, methods=['post'])
+    def assign_project(self, request, uuid=None):
+        """Assign device to a project"""
+        device = self.get_object()
+        
+        # Check permission
+        if not device.organization.members.filter(user=request.user).exists():
+            return Response({'error': 'Permission denied'}, status=403)
+        
+        serializer = DeviceProjectAssignmentSerializer(
+            data=request.data,
+            context={'device': device}
+        )
+        
+        if serializer.is_valid():
+            project_uuid = serializer.validated_data['project_uuid']
+            
+            try:
+                from user.models import Project
+                project = Project.objects.get(
+                    uuid=project_uuid,
+                    organization=device.organization
+                )
+                
+                device.assign_to_project(project)
+                
+                return Response({
+                    'message': 'Device assigned to project successfully',
+                    'device_uuid': str(device.uuid),
+                    'project_uuid': str(project.uuid)
+                })
+                
+            except Project.DoesNotExist:
+                return Response({'error': 'Project not found'}, status=404)
+            except Exception as e:
+                return Response({'error': str(e)}, status=400)
+        
+        return Response(serializer.errors, status=400)
+    
+    @extend_schema(
+        operation_id='unassign_device_from_project',
+        tags=['Devices'],
+        summary='Unassign Device from Project',
+        description='Remove device assignment from a project',
+        responses={
+            200: {
+                'type': 'object',
+                'properties': {
+                    'message': {'type': 'string'},
+                    'device_uuid': {'type': 'string'},
+                    'project_uuid': {'type': 'string'}
+                }
+            },
+            403: {'type': 'object', 'properties': {'error': {'type': 'string'}}},
+            404: {'type': 'object', 'properties': {'error': {'type': 'string'}}}
+        }
+    )
+    @action(detail=True, methods=['delete'], url_path='assign-project/(?P<project_uuid>[^/.]+)')
+    def unassign_project(self, request, uuid=None, project_uuid=None):
+        """Remove device assignment from a project"""
+        device = self.get_object()
+        
+        # Check permission
+        if not device.organization.members.filter(user=request.user).exists():
+            return Response({'error': 'Permission denied'}, status=403)
+        
+        try:
+            from user.models import Project
+            project = Project.objects.get(
+                uuid=project_uuid,
+                organization=device.organization
+            )
+            
+            device.unassign_from_project(project)
+            
+            return Response({
+                'message': 'Device unassigned from project successfully',
+                'device_uuid': str(device.uuid),
+                'project_uuid': str(project.uuid)
+            })
+            
+        except Project.DoesNotExist:
+            return Response({'error': 'Project not found'}, status=404)
+        except Exception as e:
+            return Response({'error': str(e)}, status=400)
+
+
+@extend_schema(
+    operation_id='regenerate_device_token',
+    tags=['Devices'],
+    summary='Regenerate Device Token',
+    description='Generate a new authentication token for a device',
+    responses={
+        200: {
+            'type': 'object',
+            'properties': {
+                'message': {'type': 'string'},
+                'token': {'type': 'string'},
+                'device_uuid': {'type': 'string'}
+            }
+        },
+        403: {'type': 'object', 'properties': {'error': {'type': 'string'}}},
+        404: {'type': 'object', 'properties': {'error': {'type': 'string'}}}
+    }
+)
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def regenerate_device_token(request, device_uuid):
+    """Regenerate authentication token for a device"""
+    try:
+        device = Device.objects.get(uuid=device_uuid)
+        
+        # Check permission
+        if not device.organization.members.filter(user=request.user).exists():
+            return Response({'error': 'Permission denied'}, status=403)
+        
+        # Generate new token
+        device.token = secrets.token_urlsafe(32)
+        device.save()
+        
+        return Response({
+            'message': 'Device token regenerated successfully',
+            'token': device.token,
+            'device_uuid': str(device.uuid)
+        })
+        
+    except Device.DoesNotExist:
+        return Response({'error': 'Device not found'}, status=404)
+    except Exception as e:
+        return Response({'error': str(e)}, status=400)

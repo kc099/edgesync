@@ -3,6 +3,7 @@ from django.contrib.auth.models import User
 from django.utils import timezone
 import json
 import uuid
+import secrets
 
 class SensorData(models.Model):
     """Model to store sensor data received from ESP32 devices"""
@@ -43,33 +44,91 @@ class SensorData(models.Model):
 
 
 class Device(models.Model):
-    """Model to store IoT device information"""
+    """Model to store IoT device information with project assignment capabilities"""
     
-    device_id = models.CharField(max_length=100, unique=True, help_text="Unique device identifier")
-    device_name = models.CharField(max_length=200, help_text="Human readable device name")
-    user = models.ForeignKey(User, on_delete=models.CASCADE, help_text="Device owner")
+    DEVICE_STATUS_CHOICES = [
+        ('active', 'Active'),
+        ('inactive', 'Inactive'),
+        ('offline', 'Offline'),
+        ('error', 'Error'),
+    ]
+    
+    # Unique shareable identifier
+    uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
+    
+    # Basic device information
+    name = models.CharField(max_length=200, help_text="Human readable device name")
+    description = models.TextField(blank=True, help_text="Device description")
+    
+    # Authentication token for device API access
+    token = models.CharField(max_length=255, unique=True, help_text="Unique authentication token for device")
+    
+    # Relationships
     organization = models.ForeignKey(
         'user.Organization', 
         on_delete=models.CASCADE, 
-        help_text="Organization this device belongs to",
-        null=True,
-        blank=True
+        related_name='devices',
+        help_text="Organization this device belongs to"
     )
-    tenant_id = models.CharField(max_length=100, help_text="Tenant identifier")
-    device_type = models.CharField(max_length=50, help_text="Type of device")
+    creator = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_devices', help_text="Device creator")
+    projects = models.ManyToManyField('user.Project', blank=True, related_name='devices', help_text="Projects this device is assigned to")
+    
+    # Device status and metadata
+    status = models.CharField(max_length=20, choices=DEVICE_STATUS_CHOICES, default='active')
+    last_seen = models.DateTimeField(null=True, blank=True, help_text="When device was last seen online")
+    
+    # Legacy fields for backward compatibility
+    device_id = models.CharField(max_length=100, blank=True, help_text="Legacy device identifier")
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='legacy_devices', help_text="Legacy device owner")
+    tenant_id = models.CharField(max_length=100, blank=True, help_text="Legacy tenant identifier")
+    device_type = models.CharField(max_length=50, blank=True, help_text="Type of device")
+    
     is_active = models.BooleanField(default=True, help_text="Whether device is active")
     created_at = models.DateTimeField(default=timezone.now)
+    updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
         db_table = 'devices'
+        # Ensure unique device names per organization
+        unique_together = [('organization', 'name')]
         indexes = [
+            models.Index(fields=['organization', '-created_at']),
+            models.Index(fields=['creator', '-created_at']),
+            models.Index(fields=['uuid']),
+            models.Index(fields=['token']),
+            models.Index(fields=['status', 'is_active']),
+            # Legacy indexes
             models.Index(fields=['user', 'tenant_id']),
             models.Index(fields=['device_id']),
-            models.Index(fields=['organization', '-created_at']),
         ]
     
+    def save(self, *args, **kwargs):
+        # Generate token if not set
+        if not self.token:
+            self.token = secrets.token_urlsafe(32)
+        
+        # Set legacy user field to creator for backward compatibility
+        if not self.user_id:
+            self.user = self.creator
+            
+        super().save(*args, **kwargs)
+    
     def __str__(self):
-        return f"{self.device_name} ({self.device_id})"
+        return f"{self.name} ({self.organization.name})"
+    
+    def get_project_count(self):
+        """Get number of projects this device is assigned to"""
+        return self.projects.count()
+    
+    def assign_to_project(self, project):
+        """Assign device to a project"""
+        if project.organization != self.organization:
+            raise ValueError("Device and project must belong to the same organization")
+        self.projects.add(project)
+    
+    def unassign_from_project(self, project):
+        """Remove device from a project"""
+        self.projects.remove(project)
 
 
 class MqttCluster(models.Model):

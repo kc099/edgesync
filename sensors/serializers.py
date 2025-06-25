@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import SensorData, MqttCluster, MqttTopic, MqttActivity
+from .models import SensorData, Device, MqttCluster, MqttTopic, MqttActivity
 from typing import List, Dict, Any
 
 class SensorDataSerializer(serializers.ModelSerializer):
@@ -9,6 +9,125 @@ class SensorDataSerializer(serializers.ModelSerializer):
         model = SensorData
         fields = ['id', 'device_id', 'sensor_type', 'value', 'unit', 'timestamp', 'raw_data']
         read_only_fields = ['id', 'timestamp']
+
+
+class DeviceListSerializer(serializers.ModelSerializer):
+    """Simplified serializer for device listing"""
+    
+    project_count = serializers.SerializerMethodField()
+    organization_name = serializers.CharField(source='organization.name', read_only=True)
+    creator_name = serializers.CharField(source='creator.username', read_only=True)
+    
+    class Meta:
+        model = Device
+        fields = [
+            'uuid', 'name', 'description', 'status', 'last_seen',
+            'organization_name', 'creator_name', 'project_count',
+            'is_active', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['uuid', 'created_at', 'updated_at']
+    
+    def get_project_count(self, obj):
+        return obj.get_project_count()
+
+
+class DeviceSerializer(serializers.ModelSerializer):
+    """Full serializer for Device model with project relations"""
+    
+    project_count = serializers.SerializerMethodField()
+    organization_name = serializers.CharField(source='organization.name', read_only=True)
+    creator_name = serializers.CharField(source='creator.username', read_only=True)
+    assigned_projects = serializers.SerializerMethodField()
+    token = serializers.CharField(read_only=True)  # Token is read-only for security
+    
+    class Meta:
+        model = Device
+        fields = [
+            'uuid', 'name', 'description', 'token', 'status', 'last_seen',
+            'organization', 'organization_name', 'creator', 'creator_name',
+            'assigned_projects', 'project_count', 'is_active',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['uuid', 'token', 'creator', 'created_at', 'updated_at']
+    
+    def get_project_count(self, obj):
+        return obj.get_project_count()
+    
+    def get_assigned_projects(self, obj):
+        from user.serializers import ProjectListSerializer
+        return ProjectListSerializer(obj.projects.all(), many=True).data
+    
+    def create(self, validated_data):
+        # Set creator from request context
+        validated_data['creator'] = self.context['request'].user
+        return super().create(validated_data)
+
+
+class DeviceCreateSerializer(serializers.ModelSerializer):
+    """Serializer for creating devices with project assignment"""
+    
+    project_uuids = serializers.ListField(
+        child=serializers.UUIDField(),
+        required=False,
+        write_only=True,
+        help_text="List of project UUIDs to assign the device to"
+    )
+    token = serializers.CharField(read_only=True)  # Return token only on creation
+    
+    class Meta:
+        model = Device
+        fields = [
+            'uuid', 'name', 'description', 'organization', 'status',
+            'project_uuids', 'token', 'is_active'
+        ]
+        read_only_fields = ['uuid', 'token']
+    
+    def create(self, validated_data):
+        project_uuids = validated_data.pop('project_uuids', [])
+        
+        # Set creator from request context
+        validated_data['creator'] = self.context['request'].user
+        
+        # Create device
+        device = super().create(validated_data)
+        
+        # Assign to projects if specified
+        if project_uuids:
+            from user.models import Project
+            projects = Project.objects.filter(
+                uuid__in=project_uuids,
+                organization=device.organization
+            )
+            device.projects.set(projects)
+        
+        return device
+
+
+class DeviceUpdateSerializer(serializers.ModelSerializer):
+    """Serializer for updating devices"""
+    
+    class Meta:
+        model = Device
+        fields = ['name', 'description', 'status', 'is_active']
+
+
+class DeviceProjectAssignmentSerializer(serializers.Serializer):
+    """Serializer for assigning/unassigning devices to projects"""
+    
+    project_uuid = serializers.UUIDField()
+    
+    def validate_project_uuid(self, value):
+        from user.models import Project
+        
+        device = self.context.get('device')
+        if not device:
+            raise serializers.ValidationError("Device context not provided")
+        
+        try:
+            project = Project.objects.get(uuid=value, organization=device.organization)
+            return value
+        except Project.DoesNotExist:
+            raise serializers.ValidationError("Project not found in the same organization")
 
 
 class MqttTopicSerializer(serializers.ModelSerializer):
@@ -41,38 +160,6 @@ class ACLSerializer(serializers.Serializer):
         if value not in [1, 2, 3, 4]:  # 1=read, 2=write, 3=read/write, 4=subscribe
             raise serializers.ValidationError("Access type must be 1(read), 2(write), 3(read/write), or 4(subscribe)")
         return value
-
-
-class DeviceSerializer(serializers.Serializer):
-    """Serializer for Device operations"""
-    deviceId = serializers.CharField(max_length=100)
-    deviceName = serializers.CharField(max_length=255)
-    deviceType = serializers.CharField(max_length=100)
-    tenantId = serializers.CharField(max_length=100)
-    isActive = serializers.BooleanField(default=True)
-    createdAt = serializers.DateTimeField(read_only=True)
-    permissions = serializers.ListField(
-        child=serializers.CharField(max_length=20),
-        read_only=True
-    )
-
-
-class DeviceCreateSerializer(serializers.Serializer):
-    """Serializer for creating devices"""
-    deviceId = serializers.CharField(max_length=100)
-    deviceName = serializers.CharField(max_length=255)
-    deviceType = serializers.CharField(max_length=100)
-    tenantId = serializers.CharField(max_length=100)
-    permissions = serializers.ListField(
-        child=serializers.CharField(max_length=20),
-        required=False
-    )
-
-
-class DeviceUpdateSerializer(serializers.Serializer):
-    """Serializer for updating devices"""
-    deviceName = serializers.CharField(max_length=255, required=False)
-    isActive = serializers.BooleanField(required=False)
 
 
 class MqttPasswordSerializer(serializers.Serializer):
