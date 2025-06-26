@@ -580,16 +580,30 @@ def organization_detail_view(request, org_id):
                     'status': 'error'
                 }, status=status.HTTP_403_FORBIDDEN)
             
+            # Count items before deletion
+            projects_count = organization.projects.count()
+            dashboards_count = organization.dashboard_templates.count()
+            devices_count = organization.devices.count()
+            
             # Set related projects to inactive instead of deleting them
             organization.projects.update(status='inactive', is_active=False)
             
             # Set related dashboard templates to inactive
             organization.dashboard_templates.update(is_active=False)
             
-            # Now delete the organization (members will be cascade deleted)
+            # For devices, we can't just set them to inactive because they have CASCADE
+            # relation to organization. For now, we'll let them be deleted with the organization.
+            # In a real production system, you might want to transfer devices to another organization
+            # or change the CASCADE to SET_NULL/SET_DEFAULT behavior
+            
+            # Now delete the organization (members and devices will be cascade deleted)
+            # Note: Projects and dashboards are preserved but inactive
             organization.delete()
+            
+            message = f'Organization deleted successfully. {projects_count} projects and {dashboards_count} dashboards have been set to inactive but preserved. {devices_count} devices were deleted with the organization.'
+            
             return Response({
-                'message': 'Organization deleted successfully. Related projects and dashboards have been set to inactive.',
+                'message': message,
                 'status': 'success'
             })
     
@@ -1305,9 +1319,26 @@ def project_detail_view(request, project_uuid):
                     'status': 'error'
                 }, status=status.HTTP_403_FORBIDDEN)
             
+            # Before deleting the project, unassign all devices from this project
+            # This prevents devices from being deleted with the project
+            devices_count = project.devices.count()
+            flows_count = project.flows.count()
+            dashboards_count = project.dashboard_templates.count()
+            
+            # Unassign devices from the project (preserves the devices)
+            project.devices.clear()
+            
+            # Now delete the project (flows and dashboards will be cascade deleted as intended)
             project.delete()
+            
+            message = f'Project deleted successfully. {devices_count} devices have been unassigned and preserved.'
+            if flows_count > 0:
+                message += f' {flows_count} flows were deleted.'
+            if dashboards_count > 0:
+                message += f' {dashboards_count} dashboards were deleted.'
+            
             return Response({
-                'message': 'Project deleted successfully',
+                'message': message,
                 'status': 'success'
             })
             
