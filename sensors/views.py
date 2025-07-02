@@ -993,6 +993,37 @@ class DeviceViewSet(viewsets.ModelViewSet):
         except Exception as e:
             return Response({'error': str(e)}, status=400)
 
+    @extend_schema(
+        operation_id='get_device_token',
+        tags=['Devices'],
+        summary='Get Device Token',
+        description='Retrieve the current authentication token for a device without generating a new one.',
+        responses={
+            200: {
+                'type': 'object',
+                'properties': {
+                    'token': {'type': 'string'},
+                    'device_uuid': {'type': 'string'}
+                }
+            },
+            403: {'type': 'object', 'properties': {'error': {'type': 'string'}}},
+            404: {'type': 'object', 'properties': {'error': {'type': 'string'}}}
+        }
+    )
+    @action(detail=True, methods=['get'])
+    def token(self, request, uuid=None):
+        """Return the existing device token (no regeneration)."""
+        device = self.get_object()
+
+        # Permission check – must belong to same org as requesting user
+        if not device.organization.members.filter(user=request.user).exists():
+            return Response({'error': 'Permission denied'}, status=403)
+
+        return Response({
+            'device_uuid': str(device.uuid),
+            'token': device.token
+        })
+
 
 @extend_schema(
     operation_id='regenerate_device_token',

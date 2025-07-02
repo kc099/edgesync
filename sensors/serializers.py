@@ -83,14 +83,25 @@ class DeviceCreateSerializer(serializers.ModelSerializer):
         read_only_fields = ['uuid', 'token']
     
     def create(self, validated_data):
+        """Create a device ensuring a unique, immutable authentication token."""
+        import secrets
+        from sensors.models import Device
+
         project_uuids = validated_data.pop('project_uuids', [])
-        
-        # Set creator from request context
+
+        # Attach creator (required field)
         validated_data['creator'] = self.context['request'].user
-        
-        # Create device
+
+        # Generate a collision-free token (extremely unlikely but guard anyway)
+        token = secrets.token_urlsafe(32)
+        while Device.objects.filter(token=token).exists():
+            token = secrets.token_urlsafe(32)
+
+        validated_data['token'] = token
+
+        # Persist device with the pre-generated token
         device = super().create(validated_data)
-        
+
         # Assign to projects if specified
         if project_uuids:
             from user.models import Project
@@ -99,7 +110,7 @@ class DeviceCreateSerializer(serializers.ModelSerializer):
                 organization=device.organization
             )
             device.projects.set(projects)
-        
+
         return device
 
 
