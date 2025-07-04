@@ -77,6 +77,17 @@ class SensorDataConsumer(AsyncWebsocketConsumer):
 
         await self.accept()
 
+        # If this socket belongs to a device, send its canonical UUID so the
+        # firmware/client does not need to hard-code or separately fetch it.
+        if self.is_device and self.device:
+            try:
+                await self.send(text_data=json.dumps({
+                    "type": "device_info",
+                    "device_uuid": str(self.device.uuid)
+                }))
+            except Exception as e:
+                logger.debug(f"Failed to send device_info payload: {e}")
+
         logger.info(
             f"WebSocket connection established: {self.channel_name} |"
             f" type={'device' if self.is_device else 'viewer'}"
@@ -102,8 +113,64 @@ class SensorDataConsumer(AsyncWebsocketConsumer):
             data = json.loads(text_data)
             logger.info(f"Received data: {data}")
             
-            # Check if this is sensor data from ESP32
-            if self.is_esp32_data(data):
+            # Support two payload formats:
+            # 1) Single reading: {device_id, sensor_type, value, unit}
+            # 2) Bulk readings:  {device_id, readings: [{sensor_type, value, unit?}, ...]}
+            if "readings" in data:
+                # ---------------------------- BULK READINGS -----------------------------
+                # Normalise device_id to canonical UUID when authenticated device
+                if self.device:
+                    data["device_id"] = str(self.device.uuid)
+                device_id = data.get("device_id")
+
+                readings = data["readings"]
+                # Allow {"temperature": 25.4, "humidity": 60} style objects as shorthand
+                if isinstance(readings, dict):
+                    readings = [
+                        {"sensor_type": k, "value": v} for k, v in readings.items()
+                    ]
+
+                saved_count = 0
+                for reading in readings:
+                    reading_payload = {
+                        "device_id": device_id,
+                        "sensor_type": reading.get("sensor_type") or reading.get("type"),
+                        "value": reading.get("value"),
+                        "unit": reading.get("unit", "")
+                    }
+                    if not self.is_esp32_data(reading_payload):
+                        logger.debug(f"Skipping invalid reading fragment: {reading}")
+                        continue
+
+                    sensor_data = await self.save_sensor_data(reading_payload)
+                    saved_count += 1
+
+                    broadcast_data = {
+                        'type': 'sensor_data',
+                        'device_id': device_id,
+                        'sensor_type': sensor_data.sensor_type,
+                        'value': sensor_data.value,
+                        'unit': sensor_data.unit,
+                        'timestamp': sensor_data.timestamp.isoformat(),
+                        'id': sensor_data.id
+                    }
+
+                    # Broadcast each reading independently so existing frontend code keeps working
+                    await self.channel_layer.group_send(
+                        self.room_group_name,
+                        {
+                            'type': 'sensor_data_message',
+                            'data': broadcast_data
+                        }
+                    )
+
+                await self.send(text_data=json.dumps({
+                    'status': 'success',
+                    'message': f'{saved_count} readings received and saved'
+                }))
+
+            elif self.is_esp32_data(data):
+                # ---------------------------- SINGLE READING -----------------------------
                 # Override device_id with canonical UUID if authenticated device
                 if self.device:
                     data["device_id"] = str(self.device.uuid)
