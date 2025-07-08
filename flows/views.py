@@ -108,20 +108,57 @@ class FlowDiagramViewSet(viewsets.ModelViewSet):
     def execute(self, request, pk=None):
         """Execute a flow diagram"""
         flow = self.get_object()
-        execution = FlowExecution.objects.create(
-            flow=flow,
-            status='pending'
-        )
         
-        # TODO: Implement flow execution logic
-        # This would involve processing nodes based on their connections
-        # and executing the appropriate logic for each node type
-        
-        return Response({
-            'execution_id': execution.id,
-            'status': 'started',
-            'message': 'Flow execution started'
-        })
+        try:
+            # Import the flow executor
+            from .engine.flow_executor import FlowExecutor, ExecutionStrategy
+            
+            # Get execution parameters from request
+            execution_strategy = request.data.get('strategy', 'hybrid')
+            max_workers = request.data.get('max_workers', 4)
+            trigger_data = request.data.get('trigger_data', {})
+            
+            # Map string strategy to enum
+            strategy_map = {
+                'sequential': ExecutionStrategy.SEQUENTIAL,
+                'parallel': ExecutionStrategy.PARALLEL,
+                'hybrid': ExecutionStrategy.HYBRID
+            }
+            strategy = strategy_map.get(execution_strategy, ExecutionStrategy.HYBRID)
+            
+            # Execute the flow
+            result = FlowExecutor.create_and_execute(
+                flow_diagram=flow,
+                trigger_data=trigger_data,
+                execution_strategy=strategy,
+                max_workers=max_workers
+            )
+            
+            return Response({
+                'success': True,
+                'execution_id': result['execution_id'],
+                'flow_id': result['flow_id'],
+                'status': 'completed',
+                'message': 'Flow execution completed successfully',
+                'results': result['execution_results']['execution_summary'],
+                'dependency_info': result['dependency_info']
+            })
+            
+        except Exception as e:
+            # Create failed execution record
+            execution = FlowExecution.objects.create(
+                flow=flow,
+                status='failed',
+                error_message=str(e)
+            )
+            
+            return Response({
+                'success': False,
+                'execution_id': execution.id,
+                'status': 'failed',
+                'message': f'Flow execution failed: {str(e)}',
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @extend_schema(
         operation_id='duplicate_flow',
