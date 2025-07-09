@@ -247,3 +247,57 @@ class MqttActivity(models.Model):
         return f"{self.cluster.name}: {self.activity_type} at {self.timestamp}"
 
 
+# ---------------------------------------------------------------------------
+# Dashboard-widget tracking models (short-term buffer for live sensor widgets)
+# ---------------------------------------------------------------------------
+
+class TrackedVariable(models.Model):
+    """Identifies which device/sensor values should be persisted for a widget."""
+
+    device_id = models.CharField(max_length=100)
+    sensor_type = models.CharField(max_length=50)
+
+    # Widget + dashboard this variable feeds
+    widget_id = models.CharField(max_length=100)
+    dashboard_uuid = models.CharField(max_length=36)
+
+    max_samples = models.IntegerField(default=50, help_text="How many samples to retain")
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'tracked_variables'
+        unique_together = [('device_id', 'sensor_type', 'widget_id')]
+        indexes = [
+            models.Index(fields=['device_id', 'sensor_type']),
+            models.Index(fields=['widget_id']),
+        ]
+
+    def __str__(self):
+        return f"{self.device_id}:{self.sensor_type} → widget {self.widget_id}"
+
+
+class WidgetSample(models.Model):
+    """Circular-buffer sample for a widget (max 50 rows per tracked variable)."""
+
+    widget = models.ForeignKey(
+        TrackedVariable,
+        on_delete=models.CASCADE,
+        related_name='samples'
+    )
+    timestamp = models.DateTimeField()
+    value = models.FloatField()
+    unit = models.CharField(max_length=20, blank=True)
+
+    class Meta:
+        ordering = ['-timestamp']
+        db_table = 'widget_samples'
+        indexes = [
+            models.Index(fields=['widget', '-timestamp']),
+        ]
+
+    def __str__(self):
+        return f"{self.widget.widget_id} @ {self.timestamp}: {self.value}{self.unit}"
+
+

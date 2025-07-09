@@ -24,4 +24,6 @@ urlpatterns = [
     # Dashboard template endpoints
     path('dashboard-templates/', views.dashboard_templates_view, name='dashboard_templates'),
     path('dashboard-templates/<uuid:template_uuid>/', views.dashboard_template_detail_view, name='dashboard_template_detail'),
+    path('dashboard-templates/<uuid:template_uuid>/widgets/<str:widget_id>/data/', views.dashboard_widget_data_view, name='dashboard_widget_data'),
+    path('dashboard-templates/<uuid:template_uuid>/widgets/<str:widget_id>/samples/', views.widget_samples_view, name='widget_widget_samples'),
 ] 

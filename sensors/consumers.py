@@ -2,10 +2,11 @@ import json
 import logging
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
-from .models import SensorData, Device
+from .models import SensorData, Device, TrackedVariable, WidgetSample
 import urllib.parse
 from rest_framework_simplejwt.tokens import UntypedToken
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
+from django.utils import timezone
 
 logger = logging.getLogger(__name__)
 
@@ -164,6 +165,15 @@ class SensorDataConsumer(AsyncWebsocketConsumer):
                         }
                     )
 
+                    # ---------------- Persist / broadcast for widgets ----------------
+                    await self._handle_widget_tracking(
+                        device_id=device_id,
+                        sensor_type=sensor_data.sensor_type,
+                        value=sensor_data.value,
+                        unit=sensor_data.unit,
+                        timestamp=sensor_data.timestamp,
+                    )
+
                 await self.send(text_data=json.dumps({
                     'status': 'success',
                     'message': f'{saved_count} readings received and saved'
@@ -196,6 +206,14 @@ class SensorDataConsumer(AsyncWebsocketConsumer):
                         'type': 'sensor_data_message',
                         'data': broadcast_data
                     }
+                )
+
+                await self._handle_widget_tracking(
+                    device_id=broadcast_data['device_id'],
+                    sensor_type=broadcast_data['sensor_type'],
+                    value=broadcast_data['value'],
+                    unit=broadcast_data['unit'],
+                    timestamp=timezone.now(),
                 )
                 
                 # Send confirmation back to ESP32
@@ -237,3 +255,97 @@ class SensorDataConsumer(AsyncWebsocketConsumer):
     def save_sensor_data(self, data):
         """Save sensor data to database"""
         return SensorData.create_from_esp32_data(data) 
+
+    # ---------------------------------------------------------------------
+    # Widget tracking helpers
+    # ---------------------------------------------------------------------
+
+    async def _handle_widget_tracking(self, *, device_id: str, sensor_type: str, value: float, unit: str, timestamp):
+        """Persist sample & broadcast to any widgets that track this variable."""
+        tracked_vars = await database_sync_to_async(list)(
+            TrackedVariable.objects.filter(device_id=device_id, sensor_type=sensor_type)
+        )
+        if not tracked_vars:
+            return
+
+        for tv in tracked_vars:
+            # Save sample
+            await database_sync_to_async(WidgetSample.objects.create)(
+                widget=tv,
+                timestamp=timestamp,
+                value=value,
+                unit=unit,
+            )
+
+            # Trim to max_samples
+            await database_sync_to_async(self._trim_samples)(tv)
+
+            # Broadcast to widget group
+            await self.channel_layer.group_send(
+                f'widget_{tv.widget_id}',
+                {
+                    'type': 'widget_update',
+                    'payload': {
+                        'timestamp': timestamp.isoformat(),
+                        'value': value,
+                        'unit': unit,
+                    }
+                }
+            )
+
+    def _trim_samples(self, tv):
+        qs = WidgetSample.objects.filter(widget=tv).order_by('-timestamp')
+        excess = qs[tv.max_samples:]
+        if excess:
+            WidgetSample.objects.filter(id__in=[s.id for s in excess]).delete()
+
+# ---------------------------------------------------------------------------
+# Consumer for dashboard widgets (read-only, just receives updates)
+# ---------------------------------------------------------------------------
+
+
+class WidgetDataConsumer(AsyncWebsocketConsumer):
+    async def connect(self):
+        logger.info(f"WidgetDataConsumer connect attempt: path={self.scope.get('path')} query={self.scope.get('query_string')} user={self.scope.get('user')}")
+        
+        # --- Authentication (same pattern as SensorDataConsumer) ---------
+        # Check for JWT token in query params
+        query_params = urllib.parse.parse_qs(self.scope.get("query_string", b"").decode())
+        token_param = query_params.get("token", [None])[0]
+
+        if token_param:
+            # Validate JWT token and set user in scope
+            try:
+                UntypedToken(token_param)  # validates signature & expiry
+                from rest_framework_simplejwt.authentication import JWTAuthentication
+                jwt_auth = JWTAuthentication()
+                validated_token = jwt_auth.get_validated_token(token_param)
+                user = await database_sync_to_async(jwt_auth.get_user)(validated_token)
+                self.scope["user"] = user
+            except (InvalidToken, TokenError) as e:
+                logger.warning("Invalid JWT token provided for widget connection – rejecting")
+                await self.close(code=4001)
+                return
+
+        # Check if user is authenticated
+        user = self.scope.get("user")
+        if not (user and user.is_authenticated):
+            logger.warning("Unauthenticated widget websocket connection attempted – rejecting")
+            await self.close(code=4003)
+            return
+        # -----------------------------------------------------------------
+        
+        self.widget_id = self.scope['url_route']['kwargs']['widget_id']
+        self.group_name = f'widget_{self.widget_id}'
+
+        await self.channel_layer.group_add(self.group_name, self.channel_name)
+        await self.accept()
+        
+        logger.info(f"WidgetDataConsumer connection established for widget: {self.widget_id}, user: {user.username if user else 'Anonymous'}")
+
+    async def disconnect(self, close_code):
+        await self.channel_layer.group_discard(self.group_name, self.channel_name)
+        logger.info(f"WidgetDataConsumer disconnected: widget={self.widget_id}, code={close_code}")
+
+    async def widget_update(self, event):
+        await self.send(text_data=json.dumps(event['payload'])) 

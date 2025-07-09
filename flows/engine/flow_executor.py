@@ -227,6 +227,18 @@ class FlowExecutor:
             node_execution.save()
         except NodeExecution.DoesNotExist:
             logger.warning(f"NodeExecution record not found for node {node_id}")
+
+        # Store node output for dashboard widgets
+        try:
+            from ..models import FlowNodeOutput
+            FlowNodeOutput.objects.create(
+                flow_execution=self.flow_execution,
+                node_id=node_id,
+                output_data=result
+            )
+            logger.debug(f"Stored output for node {node_id} for dashboard widgets")
+        except Exception as e:
+            logger.error(f"Failed to store node output for {node_id}: {e}")
         
         # Fire callback
         if self.on_node_complete:

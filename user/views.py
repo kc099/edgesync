@@ -901,9 +901,14 @@ def dashboard_templates_view(request):
             Q(creator=request.user)
         ).distinct()
         
+        # Filter by project if provided
+        project_id = request.GET.get('project')
+        if project_id:
+            templates = templates.filter(project__uuid=project_id)
+        
         serializer = DashboardTemplateSerializer(templates, many=True)
         return Response({
-            'templates': serializer.data,
+            'results': serializer.data,  # Changed from 'templates' to 'results' to match frontend expectation
             'status': 'success'
         })
     
@@ -1088,6 +1093,224 @@ def dashboard_template_detail_view(request, template_uuid):
     except DashboardTemplate.DoesNotExist:
         return Response({
             'error': 'Template not found',
+            'status': 'error'
+        }, status=status.HTTP_404_NOT_FOUND)
+
+
+@extend_schema(
+    operation_id='get_dashboard_widget_data',
+    tags=['Dashboard Templates'],
+    summary='Get Dashboard Widget Data',
+    description='Get data for a specific widget in a dashboard template',
+    parameters=[
+        OpenApiParameter(
+            name='template_uuid',
+            type=OpenApiTypes.UUID,
+            location=OpenApiParameter.PATH,
+            description='Dashboard template UUID'
+        ),
+        OpenApiParameter(
+            name='widget_id',
+            type=OpenApiTypes.STR,
+            location=OpenApiParameter.PATH,
+            description='Widget ID within the dashboard'
+        )
+    ],
+    responses={
+        200: {
+            'type': 'object',
+            'properties': {
+                'widget_id': {'type': 'string'},
+                'widget_type': {'type': 'string'},
+                'data': {'type': 'object'},
+                'meta': {'type': 'object'}
+            }
+        },
+        404: {
+            'type': 'object',
+            'properties': {
+                'error': {'type': 'string'},
+                'status': {'type': 'string'}
+            }
+        }
+    },
+    methods=['GET']
+)
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def dashboard_widget_data_view(request, template_uuid, widget_id):
+    """Get data for a specific widget in a dashboard template"""
+    try:
+        # Get dashboard template
+        template = DashboardTemplate.objects.get(uuid=template_uuid)
+        
+        # Check permissions
+        has_view_access = (
+            template.creator == request.user or
+            template.organization.members.filter(user=request.user).exists() or
+            template.permissions.filter(user=request.user).exists()
+        )
+        
+        if not has_view_access:
+            return Response({
+                'error': 'You do not have access to this template',
+                'status': 'error'
+            }, status=status.HTTP_403_FORBIDDEN)
+        
+        # Find widget in dashboard template
+        widget_config = None
+        for widget in template.widgets or []:
+            if widget.get('id') == widget_id:
+                widget_config = widget
+                break
+        
+        if not widget_config:
+            return Response({
+                'error': 'Widget not found in dashboard template',
+                'status': 'error'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        # Get data source configuration
+        data_source = widget_config.get('dataSource', {})
+        
+        if data_source.get('type') == 'flow_node':
+            return _get_flow_node_widget_data(data_source, widget_config)
+        else:
+            return Response({
+                'error': f"Unsupported data source type: {data_source.get('type')}",
+                'status': 'error'
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
+    except DashboardTemplate.DoesNotExist:
+        return Response({
+            'error': 'Dashboard template not found',
+            'status': 'error'
+        }, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({
+            'error': str(e),
+            'status': 'error'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+def _get_flow_node_widget_data(data_source, widget_config):
+    """Get data for flow node data source (uses NodeExecution records)"""
+    from flows.models import FlowDiagram, NodeExecution
+    from django.utils import timezone
+    from datetime import timedelta
+    
+    try:
+        # Get flow and node data
+        flow = FlowDiagram.objects.get(uuid=data_source['flowUuid'])
+        node_id = data_source['nodeId']
+        output_field = data_source.get('outputField', 'output')
+        
+        # Determine data range based on widget type
+        widget_type = widget_config.get('type')
+        
+        if widget_type in ['time_series', 'bar_chart']:
+            # Get historical data for charts
+            hours = 24  # Last 24 hours
+            since_time = timezone.now() - timedelta(hours=hours)
+            
+            outputs = (
+                NodeExecution.objects.filter(
+                    flow_execution__flow=flow,
+                    node_id=node_id,
+                    status='completed',
+                    executed_at__gte=since_time
+                ).order_by('executed_at')[:1000]
+            )
+            
+            # Transform data for chart widgets
+            chart_data = []
+            for out in outputs:
+                value = out.output_data.get(output_field)
+                if value is not None:
+                    chart_data.append({
+                        'timestamp': out.executed_at.isoformat() if out.executed_at else None,
+                        'value': value,
+                        'label': out.executed_at.strftime('%H:%M') if out.executed_at else ''
+                    })
+            
+            return Response({
+                'widget_id': widget_config.get('id'),
+                'widget_type': widget_type,
+                'data': chart_data,
+                'meta': {
+                    'total_points': len(chart_data),
+                    'time_range': f'{hours} hours',
+                    'last_updated': timezone.now().isoformat()
+                },
+                'status': 'success'
+            })
+            
+        elif widget_type in ['gauge', 'stat_panel']:
+            # Get latest value for single-value widgets
+            latest_output = (
+                NodeExecution.objects.filter(
+                    flow_execution__flow=flow,
+                    node_id=node_id,
+                    status='completed'
+                ).order_by('-executed_at').first()
+            )
+            
+            if not latest_output:
+                return Response({
+                    'widget_id': widget_config.get('id'),
+                    'widget_type': widget_type,
+                    'data': None,
+                    'message': 'No data available',
+                    'status': 'success'
+                })
+            
+            value = latest_output.output_data.get(output_field)
+            
+            # Calculate trend for stat panel
+            trend_data = None
+            if widget_type == 'stat_panel':
+                # Get previous value for trend calculation
+                previous_output = (
+                    NodeExecution.objects.filter(
+                        flow_execution__flow=flow,
+                        node_id=node_id,
+                        status='completed',
+                        executed_at__lt=latest_output.executed_at if latest_output else None
+                    ).order_by('-executed_at').first()
+                )
+                
+                if previous_output:
+                    previous_value = previous_output.output_data.get(output_field)
+                    if previous_value is not None and value is not None:
+                        trend_data = {
+                            'change': value - previous_value,
+                            'percentage': ((value - previous_value) / previous_value * 100) if previous_value != 0 else 0,
+                            'direction': 'up' if value > previous_value else 'down' if value < previous_value else 'stable'
+                        }
+            
+            return Response({
+                'widget_id': widget_config.get('id'),
+                'widget_type': widget_type,
+                'data': {
+                    'value': value,
+                    'timestamp': latest_output.executed_at.isoformat() if latest_output.executed_at else None,
+                    'trend': trend_data
+                },
+                'meta': {
+                    'last_updated': latest_output.executed_at.isoformat() if latest_output.executed_at else None
+                },
+                'status': 'success'
+            })
+            
+        else:
+            return Response({
+                'error': f"Widget type '{widget_type}' not supported yet",
+                'status': 'error'
+            }, status=status.HTTP_501_NOT_IMPLEMENTED)
+            
+    except FlowDiagram.DoesNotExist:
+        return Response({
+            'error': 'Flow not found',
             'status': 'error'
         }, status=status.HTTP_404_NOT_FOUND)
 
@@ -1352,3 +1575,57 @@ def project_detail_view(request, project_uuid):
             'error': 'Failed to process project request',
             'status': 'error'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+# ---------------------------------------------------------------------------
+#  Widget samples endpoint (device widgets)
+# ---------------------------------------------------------------------------
+
+
+@extend_schema(
+    operation_id='get_widget_samples',
+    tags=['Dashboard Templates'],
+    summary='Get Widget Samples',
+    description='Return last N samples (<=50) for a widget that tracks a device variable',
+    parameters=[
+        {
+            'name': 'template_uuid',
+            'in': 'path',
+            'type': 'string',
+            'description': 'Dashboard template UUID'
+        },
+        {
+            'name': 'widget_id',
+            'in': 'path',
+            'type': 'string',
+            'description': 'Widget ID'
+        }
+    ],
+    responses={
+        200: {
+            'type': 'object',
+            'properties': {
+                'data': {'type': 'array'},
+                'widget_id': {'type': 'string'}
+            }
+        }
+    }
+)
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def widget_samples_view(request, template_uuid, widget_id):
+    from sensors.models import TrackedVariable, WidgetSample
+    try:
+        tv = TrackedVariable.objects.filter(widget_id=widget_id, dashboard_uuid=template_uuid).first()
+        if not tv:
+            return Response({'data': [], 'widget_id': widget_id})
+        samples = WidgetSample.objects.filter(widget=tv).order_by('-timestamp')[:tv.max_samples]
+        data = [
+            {
+                'timestamp': s.timestamp.isoformat(),
+                'value': s.value,
+                'unit': s.unit
+            } for s in reversed(samples)  # oldest→newest
+        ]
+        return Response({'widget_id': widget_id, 'data': data})
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
