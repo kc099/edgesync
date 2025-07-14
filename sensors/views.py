@@ -85,14 +85,28 @@ def set_mqtt_password(request):
             data = json.loads(request.body)
         
         username = data.get('username', '').strip()
-        password = data.get('password', '').strip()
+        password = data.get('password', '').strip() if data.get('password') else None
         
         if not username or len(username) < 3:
             return Response({
                 'error': 'Username must be at least 3 characters long'
             }, status=status.HTTP_400_BAD_REQUEST)
         
-        if not password or len(password) < 8:
+        # Get or create user profile to check if this is an update
+        try:
+            profile = request.user.profile
+            is_update = bool(profile.mqtt_username)
+        except UserProfile.DoesNotExist:
+            profile = UserProfile.objects.create(user=request.user)
+            is_update = False
+        
+        # For new credentials, password is required. For updates, it's optional.
+        if not is_update and (not password or len(password) < 8):
+            return Response({
+                'error': 'Password must be at least 8 characters long'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        if password and len(password) < 8:
             return Response({
                 'error': 'Password must be at least 8 characters long'
             }, status=status.HTTP_400_BAD_REQUEST)
@@ -108,7 +122,10 @@ def set_mqtt_password(request):
             from django.db import connections
             cursor = connections['mosquitto'].cursor()
             cursor.execute("SELECT COUNT(*) FROM mosquitto_users WHERE username = %s", [username])
-            if cursor.fetchone()[0] > 0:
+            username_exists = cursor.fetchone()[0] > 0
+            
+            # If username exists, check if it belongs to the current user
+            if username_exists and profile.mqtt_username != username:
                 return Response({
                     'error': 'Username already exists. Please choose a different username.'
                 }, status=status.HTTP_400_BAD_REQUEST)
@@ -118,23 +135,38 @@ def set_mqtt_password(request):
                 'error': 'Unable to verify username availability'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
-        # Get or create user profile
-        try:
-            profile = request.user.profile
-        except UserProfile.DoesNotExist:
-            profile = UserProfile.objects.create(user=request.user)
-        
-        # Set the custom username
+        # Set the custom username in profile
+        old_username = profile.mqtt_username
         profile.mqtt_username = username
         
-        hashed_password = MosquittoUser.create_pbkdf2_password(password)
-        
-        # Create MQTT user using raw SQL
+        # Create or update MQTT user using raw SQL
         try:
-            cursor.execute(
-                "INSERT INTO mosquitto_users (username, password) VALUES (%s, %s)",
-                [username, hashed_password]
-            )
+            if username_exists and old_username == username:
+                # Update existing user
+                if password:
+                    # Update password
+                    hashed_password = MosquittoUser.create_pbkdf2_password(password)
+                    cursor.execute(
+                        "UPDATE mosquitto_users SET password = %s WHERE username = %s",
+                        [hashed_password, username]
+                    )
+                # If no password provided, just update username in profile (already done above)
+            else:
+                # Delete old username if it's different and create new one
+                if old_username and old_username != username:
+                    cursor.execute("DELETE FROM mosquitto_users WHERE username = %s", [old_username])
+                
+                # Insert new user (password is required for new users)
+                if not password:
+                    return Response({
+                        'error': 'Password is required when creating new credentials'
+                    }, status=status.HTTP_400_BAD_REQUEST)
+                
+                hashed_password = MosquittoUser.create_pbkdf2_password(password)
+                cursor.execute(
+                    "INSERT INTO mosquitto_users (username, password) VALUES (%s, %s)",
+                    [username, hashed_password]
+                )
             cursor.execute("COMMIT")
             
             # Update profile
@@ -150,14 +182,15 @@ def set_mqtt_password(request):
                     'host': '13.203.165.247',
                     'port': 1883,
                     'username': username,
-                    'password': password,
+                    'password': password or '',  # Use empty string if password is None
                 }
             )
             
             if not created:
                 # Update existing hosted cluster with new credentials
                 hosted_cluster.username = username
-                hosted_cluster.password = password
+                if password:  # Only update password if provided
+                    hosted_cluster.password = password
                 hosted_cluster.save()
             
         except Exception as e:
@@ -671,17 +704,20 @@ def user_mqtt_info(request):
                 cursor = connections['mosquitto'].cursor()
                 cursor.execute("SELECT COUNT(*) FROM mosquitto_users WHERE username = %s", [mqtt_username])
                 has_password = cursor.fetchone()[0] > 0
+                cursor.close()
             except Exception as e:
                 print(f"Error checking MQTT user: {e}")
+                import traceback
+                traceback.print_exc()
                 has_password = False
         
         return Response({
             'username': mqtt_username,
             'hasPassword': has_password,
-            'passwordSet': profile.mqtt_password_set,
-            'connected': profile.mqtt_connected,
-            'subscriptionType': profile.subscription_type,
-            'deviceLimit': profile.device_limit,
+            'passwordSet': profile.mqtt_password_set if hasattr(profile, 'mqtt_password_set') else False,
+            'connected': profile.mqtt_connected if hasattr(profile, 'mqtt_connected') else False,
+            'subscriptionType': profile.subscription_type if hasattr(profile, 'subscription_type') else 'free',
+            'deviceLimit': profile.device_limit if hasattr(profile, 'device_limit') else 5,
             'broker': {
                 'host': '13.203.165.247',
                 'port': 1883,
@@ -691,8 +727,10 @@ def user_mqtt_info(request):
         
     except Exception as e:
         print(f"Error in user_mqtt_info: {e}")
+        import traceback
+        traceback.print_exc()
         return Response({
-            'error': 'Failed to load MQTT information'
+            'error': f'Failed to load MQTT information: {str(e)}'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @extend_schema(
