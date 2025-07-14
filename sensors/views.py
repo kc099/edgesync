@@ -2,7 +2,7 @@ from django.shortcuts import render
 from django.http import JsonResponse
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.csrf import csrf_exempt
-from rest_framework import generics, filters, status, viewsets
+from rest_framework import generics, filters, status, viewsets, serializers
 from rest_framework.decorators import api_view, permission_classes, action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -223,7 +223,16 @@ def set_mqtt_password(request):
     responses={
         200: {
             'type': 'array',
-            'items': ACLSerializer
+            'items': {
+                'type': 'object',
+                'properties': {
+                    'id': {'type': 'string'},
+                    'username': {'type': 'string'},
+                    'topic': {'type': 'string'},
+                    'rw': {'type': 'integer'},
+                    'created_at': {'type': 'string'}
+                }
+            }
         },
         400: {
             'type': 'object',
