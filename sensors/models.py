@@ -32,14 +32,42 @@ class SensorData(models.Model):
             if isinstance(data, str):
                 data = json.loads(data)
             
+            # Handle different value types based on sensor type
+            raw_value = data.get('value', 0)
+            sensor_type = data.get('sensor_type', 'unknown').lower()
+            
+            # Define sensor types that have string values
+            string_value_sensors = [
+                'location', 'gps', 'coordinates', 'address', 'place',
+                'personal_id', 'user_id', 'device_id', 'identity',
+                'camera', 'image', 'video', 'audio', 'text',
+                'status', 'state', 'mode', 'alert', 'message'
+            ]
+            
+            # Try to convert to float, but handle string values gracefully
+            if any(sensor in sensor_type for sensor in string_value_sensors):
+                # For string-type sensors, store as 0.0 in the float field
+                # and preserve the actual value in raw_data
+                numeric_value = 0.0
+            else:
+                # For numeric sensors, convert to float
+                try:
+                    numeric_value = float(raw_value)
+                except (ValueError, TypeError):
+                    # If conversion fails, store as 0.0 and log the issue
+                    numeric_value = 0.0
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.warning(f"Could not convert sensor value to float: {raw_value} for sensor {sensor_type}")
+            
             return cls.objects.create(
                 device_id=data.get('device_id', 'unknown'),
                 sensor_type=data.get('sensor_type', 'unknown'),
-                value=float(data.get('value', 0)),
+                value=numeric_value,
                 unit=data.get('unit', ''),
                 raw_data=data
             )
-        except (ValueError, TypeError, json.JSONDecodeError) as e:
+        except (json.JSONDecodeError) as e:
             raise ValueError(f"Invalid sensor data format: {e}")
 
 

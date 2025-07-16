@@ -1,12 +1,15 @@
 import json
 import logging
+import base64
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 from .models import SensorData, Device, TrackedVariable, WidgetSample
+from .utils.device_encryption import device_encryption_manager
 import urllib.parse
 from rest_framework_simplejwt.tokens import UntypedToken
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from django.utils import timezone
+import base64
 
 logger = logging.getLogger(__name__)
 
@@ -82,12 +85,26 @@ class SensorDataConsumer(AsyncWebsocketConsumer):
         # firmware/client does not need to hard-code or separately fetch it.
         if self.is_device and self.device:
             try:
+                # Generate or retrieve device encryption key
+                device_key = await database_sync_to_async(
+                    device_encryption_manager.get_device_key
+                )(str(self.device.uuid))
+                
+                # Send device info with encryption key
                 await self.send(text_data=json.dumps({
                     "type": "device_info",
-                    "device_uuid": str(self.device.uuid)
+                    "device_uuid": str(self.device.uuid),
+                    "encryption_key": base64.b64encode(device_key).decode(),
+                    "encryption_enabled": True
                 }))
             except Exception as e:
                 logger.debug(f"Failed to send device_info payload: {e}")
+                # Fallback without encryption
+                await self.send(text_data=json.dumps({
+                    "type": "device_info", 
+                    "device_uuid": str(self.device.uuid),
+                    "encryption_enabled": False
+                }))
 
         logger.info(
             f"WebSocket connection established: {self.channel_name} |"
@@ -113,6 +130,18 @@ class SensorDataConsumer(AsyncWebsocketConsumer):
         try:
             data = json.loads(text_data)
             logger.info(f"Received data: {data}")
+            
+            # Decrypt data if encrypted
+            if self.device:
+                device_key = await database_sync_to_async(
+                    device_encryption_manager.get_device_key
+                )(str(self.device.uuid))
+                
+                data = await database_sync_to_async(
+                    device_encryption_manager.decrypt_sensor_values
+                )(data, device_key)
+                
+                logger.info(f"Decrypted data: {data}")
             
             # Support two payload formats:
             # 1) Single reading: {device_id, sensor_type, value, unit}
@@ -146,11 +175,14 @@ class SensorDataConsumer(AsyncWebsocketConsumer):
                     sensor_data = await self.save_sensor_data(reading_payload)
                     saved_count += 1
 
+                    # Get the original value for broadcasting (important for string sensors)
+                    original_value = reading.get("value")
+                    
                     broadcast_data = {
                         'type': 'sensor_data',
                         'device_id': device_id,
                         'sensor_type': sensor_data.sensor_type,
-                        'value': sensor_data.value,
+                        'value': original_value,  # Use original value, not the stored float
                         'unit': sensor_data.unit,
                         'timestamp': sensor_data.timestamp.isoformat(),
                         'id': sensor_data.id
@@ -169,7 +201,7 @@ class SensorDataConsumer(AsyncWebsocketConsumer):
                     await self._handle_widget_tracking(
                         device_id=device_id,
                         sensor_type=sensor_data.sensor_type,
-                        value=sensor_data.value,
+                        value=original_value,  # Use original value for widgets too
                         unit=sensor_data.unit,
                         timestamp=sensor_data.timestamp,
                     )
@@ -188,12 +220,15 @@ class SensorDataConsumer(AsyncWebsocketConsumer):
                 # Save to database
                 sensor_data = await self.save_sensor_data(data)
                 
+                # Get the original value for broadcasting
+                original_value = data.get("value")
+                
                 # Prepare data for broadcasting
                 broadcast_data = {
                     'type': 'sensor_data',
                     'device_id': str(self.device.uuid) if self.device else sensor_data.device_id,
                     'sensor_type': sensor_data.sensor_type,
-                    'value': sensor_data.value,
+                    'value': original_value,  # Use original value, not the stored float
                     'unit': sensor_data.unit,
                     'timestamp': sensor_data.timestamp.isoformat(),
                     'id': sensor_data.id
@@ -211,7 +246,7 @@ class SensorDataConsumer(AsyncWebsocketConsumer):
                 await self._handle_widget_tracking(
                     device_id=broadcast_data['device_id'],
                     sensor_type=broadcast_data['sensor_type'],
-                    value=broadcast_data['value'],
+                    value=original_value,  # Use original value for widget tracking
                     unit=broadcast_data['unit'],
                     timestamp=timezone.now(),
                 )
@@ -260,7 +295,7 @@ class SensorDataConsumer(AsyncWebsocketConsumer):
     # Widget tracking helpers
     # ---------------------------------------------------------------------
 
-    async def _handle_widget_tracking(self, *, device_id: str, sensor_type: str, value: float, unit: str, timestamp):
+    async def _handle_widget_tracking(self, *, device_id: str, sensor_type: str, value, unit: str, timestamp):
         """Persist sample & broadcast to any widgets that track this variable."""
         tracked_vars = await database_sync_to_async(list)(
             TrackedVariable.objects.filter(device_id=device_id, sensor_type=sensor_type)
@@ -269,25 +304,37 @@ class SensorDataConsumer(AsyncWebsocketConsumer):
             return
 
         for tv in tracked_vars:
+            # Convert value to appropriate type for storage
+            # WidgetSample expects a float value field, so we need to handle string sensors
+            if isinstance(value, str):
+                # For string sensors, we'll store 0.0 as the numeric value
+                # and rely on the actual value being in the broadcast data
+                numeric_value = 0.0
+            else:
+                try:
+                    numeric_value = float(value)
+                except (ValueError, TypeError):
+                    numeric_value = 0.0
+                    
             # Save sample
             await database_sync_to_async(WidgetSample.objects.create)(
                 widget=tv,
                 timestamp=timestamp,
-                value=value,
+                value=numeric_value,
                 unit=unit,
             )
 
             # Trim to max_samples
             await database_sync_to_async(self._trim_samples)(tv)
 
-            # Broadcast to widget group
+            # Broadcast to widget group - use original value in broadcast
             await self.channel_layer.group_send(
                 f'widget_{tv.widget_id}',
                 {
                     'type': 'widget_update',
                     'payload': {
                         'timestamp': timestamp.isoformat(),
-                        'value': value,
+                        'value': value,  # Use original value (string or numeric)
                         'unit': unit,
                     }
                 }
@@ -348,4 +395,4 @@ class WidgetDataConsumer(AsyncWebsocketConsumer):
         logger.info(f"WidgetDataConsumer disconnected: widget={self.widget_id}, code={close_code}")
 
     async def widget_update(self, event):
-        await self.send(text_data=json.dumps(event['payload'])) 
+        await self.send(text_data=json.dumps(event['payload']))

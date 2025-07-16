@@ -326,3 +326,17 @@ SOCIALACCOUNT_PROVIDERS = {
         }
     }
 }
+
+# IoT Device Encryption Settings
+# Define which sensor types should be encrypted for privacy
+ENCRYPTED_SENSOR_TYPES = [
+    'location', 'gps', 'camera', 'microphone', 'biometric',
+    'personal', 'sensitive', 'private', 'coordinates', 'address',
+    'identity', 'face', 'voice', 'fingerprint', 'health'
+]
+
+# Device encryption key cache timeout (24 hours)
+DEVICE_ENCRYPTION_CACHE_TIMEOUT = 86400
+
+# Enable/disable device encryption globally
+DEVICE_ENCRYPTION_ENABLED = True

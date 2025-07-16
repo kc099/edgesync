@@ -1115,3 +1115,43 @@ def regenerate_device_token(request, device_uuid):
         return Response({'error': 'Device not found'}, status=404)
     except Exception as e:
         return Response({'error': str(e)}, status=400)
+
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework import status
+from .models import Device
+from .utils.device_encryption import device_encryption_manager
+import base64
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def get_device_encryption_key(request):
+    """
+    Get encryption key for a specific device
+    Only device owner or organization member can access
+    """
+    try:
+        device_uuid = request.data.get('device_uuid')
+        if not device_uuid:
+            return Response({'error': 'device_uuid required'}, status=400)
+        
+        # Verify device access
+        device = Device.objects.get(
+            uuid=device_uuid,
+            organization__members=request.user
+        )
+        
+        # Generate/retrieve encryption key
+        device_key = device_encryption_manager.get_device_key(device_uuid)
+        
+        return Response({
+            'device_uuid': device_uuid,
+            'encryption_key': base64.b64encode(device_key).decode(),
+            'encryption_enabled': True
+        })
+        
+    except Device.DoesNotExist:
+        return Response({'error': 'Device not found or access denied'}, status=404)
+    except Exception as e:
+        return Response({'error': str(e)}, status=500)
