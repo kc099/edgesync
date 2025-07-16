@@ -37,11 +37,8 @@ class DeviceEncryption:
         self.encryption_enabled = False
         self.backend = default_backend()
         
-        # Define sensitive sensor types that should be encrypted
-        self.sensitive_sensors = [
-            'location', 'gps', 'camera', 'microphone', 'biometric',
-            'personal', 'sensitive', 'private', 'coordinates'
-        ]
+        # For industrial IoT, ALL sensor data is considered sensitive
+        # and requires end-to-end encryption
     
     def initialize_encryption(self, key_b64):
         """Initialize encryption with key from backend"""
@@ -54,7 +51,7 @@ class DeviceEncryption:
             self.encryption_enabled = False
     
     def encrypt_sensor_data(self, data):
-        """Encrypt sensitive sensor values while preserving JSON structure"""
+        """Encrypt ALL sensor values for end-to-end industrial IoT security"""
         if not self.encryption_enabled or not self.device_key:
             return data
         
@@ -63,25 +60,21 @@ class DeviceEncryption:
             encrypted_data = json.loads(json.dumps(data))
             
             if "readings" in encrypted_data:
-                # Bulk readings format
+                # Bulk readings format - encrypt ALL sensor values
                 for reading in encrypted_data["readings"]:
-                    sensor_type = reading.get("sensor_type", "").lower()
-                    
-                    # Check if this sensor type should be encrypted
-                    if any(sensitive in sensor_type for sensitive in self.sensitive_sensors):
-                        original_value = str(reading["value"])
-                        reading["value"] = self._encrypt_field(original_value)
-                        reading["encrypted"] = True
-                        print(f"🔒 Encrypted {sensor_type} sensor value")
+                    sensor_type = reading.get("sensor_type", "")
+                    original_value = str(reading["value"])
+                    reading["value"] = self._encrypt_field(original_value)
+                    reading["encrypted"] = True
+                    print(f"🔒 Encrypted {sensor_type} sensor value")
             
             elif "sensor_type" in encrypted_data:
-                # Single reading format
-                sensor_type = encrypted_data.get("sensor_type", "").lower()
-                if any(sensitive in sensor_type for sensitive in self.sensitive_sensors):
-                    original_value = str(encrypted_data["value"])
-                    encrypted_data["value"] = self._encrypt_field(original_value)
-                    encrypted_data["encrypted"] = True
-                    print(f"🔒 Encrypted {sensor_type} sensor value")
+                # Single reading format - encrypt the value
+                sensor_type = encrypted_data.get("sensor_type", "")
+                original_value = str(encrypted_data["value"])
+                encrypted_data["value"] = self._encrypt_field(original_value)
+                encrypted_data["encrypted"] = True
+                print(f"🔒 Encrypted {sensor_type} sensor value")
             
             return encrypted_data
             
@@ -130,7 +123,8 @@ async def publish_sensor_data(token: str, ws_url: str):
                 if ENABLE_ENCRYPTION and info.get("encryption_enabled") and info.get("encryption_key"):
                     encryption.initialize_encryption(info["encryption_key"])
                 else:
-                    print("📡 Encryption not enabled - sending plain text data")
+                    print("📡 Encryption not enabled - WARNING: Industrial IoT requires encryption!")
+                    print("⚠️  All sensor data should be encrypted in production environment")
                     
                 print(f"Starting data publish every {SEND_INTERVAL}s …")
             else:
@@ -140,7 +134,7 @@ async def publish_sensor_data(token: str, ws_url: str):
 
         try:
             while True:
-                # Generate sample sensor data including some sensitive types
+                # Generate sample sensor data - ALL values will be encrypted
                 payload = {
                     "device_id": device_id,
                     "readings": [
@@ -155,23 +149,33 @@ async def publish_sensor_data(token: str, ws_url: str):
                             "unit": "%"
                         },
                         {
-                            "sensor_type": "location",  # This will be encrypted
+                            "sensor_type": "pressure",
+                            "value": round(random.uniform(1010.0, 1025.0), 2),
+                            "unit": "hPa"
+                        },
+                        {
+                            "sensor_type": "location",
                             "value": f"{round(random.uniform(40.0, 41.0), 6)},{round(random.uniform(-74.0, -73.0), 6)}",
                             "unit": "lat,lng"
                         },
                         {
-                            "sensor_type": "personal_id",  # This will be encrypted
+                            "sensor_type": "personal_id",
                             "value": f"USER_{random.randint(1000, 9999)}",
+                            "unit": "id"
+                        },
+                        {
+                            "sensor_type": "equipment_id",
+                            "value": f"EQ_{random.randint(100, 999)}_{uuid.uuid4().hex[:8].upper()}",
                             "unit": "id"
                         }
                     ]
                 }
                 
-                # Encrypt sensitive data
+                # Encrypt ALL sensor data for industrial IoT security
                 encrypted_payload = encryption.encrypt_sensor_data(payload)
                 
                 await websocket.send(json.dumps(encrypted_payload))
-                print(f"📤 Sent encrypted payload with {len(encrypted_payload['readings'])} readings")
+                print(f"📤 Sent fully encrypted payload with {len(encrypted_payload['readings'])} readings")
                 
                 await asyncio.sleep(SEND_INTERVAL)
         except asyncio.CancelledError:
@@ -185,10 +189,11 @@ def main():
         print("❌ Error: DEVICE_TOKEN environment variable is required")
         return
     
-    print("🚀 Starting encrypted IoT device client...")
+    print("🚀 Starting industrial IoT device client with full encryption...")
     print(f"📡 WebSocket URL: {WS_URL}")
-    print(f"🔐 Encryption enabled: {ENABLE_ENCRYPTION}")
+    print(f"🔐 Full encryption enabled: {ENABLE_ENCRYPTION}")
     print(f"⏱️  Send interval: {SEND_INTERVAL}s")
+    print("🏭 Industrial mode: ALL sensor data will be encrypted")
     
     asyncio.run(publish_sensor_data(DEVICE_TOKEN, WS_URL))
 

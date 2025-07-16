@@ -1,6 +1,6 @@
 """
-Device-specific encryption utilities for IoT sensor data
-Provides efficient field-level encryption for high-frequency sensor transmissions
+Device-specific encryption utilities for Multi-Tenant Industrial IoT Platform
+Provides end-to-end encryption for ALL sensor data in industrial environments
 """
 
 import base64
@@ -53,13 +53,13 @@ class DeviceEncryptionManager:
     
     def encrypt_sensor_values(self, data, device_key):
         """
-        Encrypt only sensitive sensor values while preserving JSON structure
+        Encrypt ALL sensor values for industrial IoT security
         
         Input: {
             "device_id": "uuid",
             "readings": [
                 {"sensor_type": "temperature", "value": 25.4, "unit": "C"},
-                {"sensor_type": "location", "value": "40.7128,-74.0060", "unit": "lat,lng"}
+                {"sensor_type": "pressure", "value": 1013.25, "unit": "hPa"}
             ]
         }
         
@@ -67,49 +67,31 @@ class DeviceEncryptionManager:
             "device_id": "uuid",
             "readings": [
                 {"sensor_type": "temperature", "value": "encrypted_base64", "unit": "C", "encrypted": true},
-                {"sensor_type": "location", "value": "encrypted_base64", "unit": "lat,lng", "encrypted": true}
+                {"sensor_type": "pressure", "value": "encrypted_base64", "unit": "hPa", "encrypted": true}
             ]
         }
         """
         try:
-            # Define which sensor types should be encrypted
-            try:
-                from django.conf import settings
-                sensitive_sensors = getattr(settings, 'ENCRYPTED_SENSOR_TYPES', [
-                    'location', 'gps', 'camera', 'microphone', 'biometric', 
-                    'personal', 'sensitive', 'private'
-                ])
-            except (ImportError, Exception):
-                # Fallback for non-Django environments or missing settings
-                sensitive_sensors = [
-                    'location', 'gps', 'camera', 'microphone', 'biometric', 
-                    'personal', 'sensitive', 'private'
-                ]
-            
             # Clone the data to avoid modifying original
             encrypted_data = json.loads(json.dumps(data))
             
             if "readings" in encrypted_data:
                 for reading in encrypted_data["readings"]:
-                    sensor_type = reading.get("sensor_type", "").lower()
+                    # Encrypt ALL sensor values for industrial IoT
+                    original_value = str(reading["value"])
+                    encrypted_value = self._encrypt_field(original_value, device_key)
                     
-                    # Check if this sensor type should be encrypted
-                    if any(sensitive in sensor_type for sensitive in sensitive_sensors):
-                        original_value = str(reading["value"])
-                        encrypted_value = self._encrypt_field(original_value, device_key)
-                        
-                        reading["value"] = encrypted_value
-                        reading["encrypted"] = True
-                        
-                        logger.debug(f"Encrypted {sensor_type} sensor value")
+                    reading["value"] = encrypted_value
+                    reading["encrypted"] = True
+                    
+                    sensor_type = reading.get("sensor_type", "unknown")
+                    logger.debug(f"Encrypted {sensor_type} sensor value")
             
             elif "value" in encrypted_data:
-                # Single reading format
-                sensor_type = encrypted_data.get("sensor_type", "").lower()
-                if any(sensitive in sensor_type for sensitive in sensitive_sensors):
-                    original_value = str(encrypted_data["value"])
-                    encrypted_data["value"] = self._encrypt_field(original_value, device_key)
-                    encrypted_data["encrypted"] = True
+                # Single reading format - encrypt the value
+                original_value = str(encrypted_data["value"])
+                encrypted_data["value"] = self._encrypt_field(original_value, device_key)
+                encrypted_data["encrypted"] = True
             
             return encrypted_data
             
