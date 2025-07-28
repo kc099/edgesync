@@ -13,24 +13,24 @@
  */
 
 #include <WiFi.h>
-#include <WebsocketsClient.h>
+#include <WebSocketsClient.h>
 #include <ArduinoJson.h>
 #include <Crypto.h>
 #include <AES.h>
 #include <CBC.h>
 #include <RNG.h>
-#include <Base64.h>
+#include <base64.hpp>
 #include <string.h>
 
 // WiFi Configuration
-const char* ssid = "YOUR_WIFI_SSID";
-const char* password = "YOUR_WIFI_PASSWORD";
+const char* ssid = "Kugelblitz";
+const char* password = "xxx";
 
 // WebSocket Configuration
-const char* websocket_host = "192.168.1.100"; // Replace with your server IP
+const char* websocket_host = "192.168.0.101"; // Replace with your server IP
 const int websocket_port = 8000;
 const char* websocket_path = "/ws/sensors/";
-const char* device_token = "1234567890abcdef"; // Your device token
+const char* device_token = "XWDWdQkDdmExLbBDKPAQu7dULLPp1dEYaj9l2FKHq9A"; // Your device token
 
 // Encryption Configuration
 CBC<AES256> aes256cbc;
@@ -165,14 +165,17 @@ void handleWebSocketMessage(const char* message) {
 
 bool initializeEncryption(const String& keyBase64) {
   // Decode base64 key
-  int keyLength = Base64.decodedLength((char*)keyBase64.c_str(), keyBase64.length());
+  int keyLength = decode_base64_length((uint8_t*)keyBase64.c_str(),
+                      keyBase64.length());
   
   if (keyLength != 32) {
     Serial.printf("❌ Invalid key length: %d (expected 32)\n", keyLength);
     return false;
   }
   
-  Base64.decode((char*)deviceKey, (char*)keyBase64.c_str(), keyBase64.length());
+  decode_base64((uint8_t*)keyBase64.c_str(),
+                keyBase64.length(),
+                deviceKey);
   
   Serial.printf("✅ Encryption key initialized (%d bytes)\n", keyLength);
   return true;
@@ -304,17 +307,22 @@ String addPKCS7Padding(const String& data) {
   return paddedData;
 }
 
-String base64Encode(const byte* data, size_t length) {
-  int encodedLen = Base64.encodedLength(length);
-  char* encoded = new char[encodedLen + 1];
-  
-  Base64.encode(encoded, (char*)data, length);
-  encoded[encodedLen] = '\0';
-  
-  String result = String(encoded);
-  delete[] encoded;
-  
-  return result;
+String base64Encode(const byte* data, size_t len)
+{
+    /* get space required for the ASCII result */
+    const uint16_t outLen = encode_base64_length(len);          // helper in v1.3.0
+
+    /* allocate output as UNSIGNED char buffer */
+    uint8_t* out = new uint8_t[outLen + 1];                     // +1 for '\0'
+
+    /* encode: (input, input_len, output) – all unsigned char*  */
+    encode_base64((uint8_t*)data, len, out);                    // ← no -fpermissive error
+
+    out[outLen] = '\0';                                         // null‑terminate
+
+    String s((char*)out);                                       // build Arduino String
+    delete[] out;
+    return s;
 }
 
 // Optional: Read real sensor data (uncomment if you have DHT22 connected)
