@@ -231,7 +231,7 @@ class MqttClusterListSerializer(serializers.ModelSerializer):
         model = MqttCluster
         fields = [
             'uuid', 'name', 'cluster_type', 'host', 'port', 'use_ssl',
-            'description', 'is_active', 'created_at',
+            'username', 'description', 'is_active', 'created_at',
             'total_topics', 'total_messages', 'total_subscriptions',
             'connection_url'
         ]
