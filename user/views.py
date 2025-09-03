@@ -11,7 +11,10 @@ from django.utils.decorators import method_decorator
 from django.db.models import Q
 from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiExample
 from drf_spectacular.openapi import OpenApiTypes
+from google.oauth2 import id_token
+from google.auth.transport import requests
 import json
+import os
 
 from .serializers import (
     LoginSerializer, SignupSerializer, UserSerializer,
@@ -361,6 +364,151 @@ def profile_view(request):
             'error': 'Authentication required',
             'status': 'error'
         }, status=status.HTTP_401_UNAUTHORIZED)
+
+
+@extend_schema(
+    operation_id='google_oauth_login',
+    tags=['Authentication'],
+    summary='Google OAuth Login',
+    description='Authenticate user with Google OAuth token and receive JWT tokens',
+    request={
+        'type': 'object',
+        'properties': {
+            'credential': {'type': 'string', 'description': 'Google OAuth credential token'}
+        },
+        'required': ['credential'],
+        'example': {
+            'credential': 'google_oauth_token_here'
+        }
+    },
+    responses={
+        200: {
+            'type': 'object',
+            'properties': {
+                'token': {'type': 'string', 'description': 'JWT access token'},
+                'refresh': {'type': 'string', 'description': 'JWT refresh token'},
+                'user': {'type': 'object', 'description': 'User profile data'},
+                'status': {'type': 'string', 'description': 'Operation status'},
+                'is_new_user': {'type': 'boolean', 'description': 'Whether this is a new user registration'}
+            }
+        },
+        400: {
+            'type': 'object',
+            'properties': {
+                'error': {'type': 'string'},
+                'status': {'type': 'string'}
+            }
+        },
+        500: {
+            'type': 'object',
+            'properties': {
+                'error': {'type': 'string'},
+                'status': {'type': 'string'}
+            }
+        }
+    }
+)
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def google_oauth_view(request):
+    """Handle Google OAuth authentication and return JWT tokens"""
+    try:
+        credential = request.data.get('credential')
+        if not credential:
+            return Response({
+                'error': 'Google credential is required',
+                'status': 'error'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Verify the Google token
+        google_client_id = os.getenv('GOOGLE_CLIENT_ID')
+        if not google_client_id:
+            return Response({
+                'error': 'Google OAuth not configured',
+                'status': 'error'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        try:
+            # Verify the token with Google
+            idinfo = id_token.verify_oauth2_token(
+                credential, 
+                requests.Request(), 
+                google_client_id
+            )
+            
+            # Extract user information
+            email = idinfo.get('email')
+            first_name = idinfo.get('given_name', '')
+            last_name = idinfo.get('family_name', '')
+            google_id = idinfo.get('sub')
+            
+            if not email:
+                return Response({
+                    'error': 'Email not provided by Google',
+                    'status': 'error'
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+        except ValueError as e:
+            return Response({
+                'error': 'Invalid Google token',
+                'status': 'error'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Check if user exists with this email
+        is_new_user = False
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            # Create new user
+            is_new_user = True
+            user = User.objects.create_user(
+                username=email,  # Use email as username
+                email=email,
+                first_name=first_name,
+                last_name=last_name
+            )
+            
+            # Create user profile
+            from .models import UserProfile
+            UserProfile.objects.get_or_create(user=user)
+
+        # Create or link Google social account
+        from allauth.socialaccount.models import SocialApp, SocialAccount
+        try:
+            social_app = SocialApp.objects.get(provider='google')
+            social_account, created = SocialAccount.objects.get_or_create(
+                user=user,
+                provider='google',
+                defaults={
+                    'uid': google_id,
+                    'extra_data': {
+                        'given_name': first_name,
+                        'family_name': last_name,
+                        'email': email
+                    }
+                }
+            )
+        except SocialApp.DoesNotExist:
+            # Google OAuth not configured in Django admin
+            pass
+
+        # Generate JWT tokens
+        refresh = RefreshToken.for_user(user)
+        access_token = refresh.access_token
+
+        return Response({
+            'token': str(access_token),
+            'refresh': str(refresh),
+            'user': UserSerializer(user).data,
+            'status': 'success',
+            'is_new_user': is_new_user
+        }, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        return Response({
+            'error': 'Google OAuth authentication failed',
+            'status': 'error'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 # Organization Management Views

@@ -10,6 +10,7 @@ urlpatterns = [
     path('logout/', views.logout_view, name='logout'),
     path('profile/', views.profile_view, name='profile'),
     path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path('google-oauth/', views.google_oauth_view, name='google_oauth'),
     
     # Organization endpoints
     path('organizations/', views.organizations_view, name='organizations'),
