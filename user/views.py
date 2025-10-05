@@ -21,10 +21,11 @@ from .serializers import (
     OrganizationSerializer, OrganizationMemberSerializer,
     DashboardTemplateSerializer, TemplatePermissionSerializer,
     CreateOrganizationSerializer, CreateDashboardTemplateSerializer,
-    ProjectSerializer, CreateProjectSerializer
+    ProjectSerializer, CreateProjectSerializer,
+    ForgotPasswordSerializer, VerifyOTPSerializer, ResetPasswordSerializer
 )
 from .utils.encryption import encryption_manager
-from .models import UserProfile, Organization, OrganizationMember, DashboardTemplate, TemplatePermission, Project
+from .models import UserProfile, Organization, OrganizationMember, DashboardTemplate, TemplatePermission, Project, PasswordResetOTP
 
 
 def get_tokens_for_user(user):
@@ -1777,3 +1778,165 @@ def widget_samples_view(request, template_uuid, widget_id):
         return Response({'widget_id': widget_id, 'data': data})
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@extend_schema(
+    operation_id='forgot_password',
+    tags=['Authentication'],
+    summary='Request Password Reset OTP',
+    description='Send OTP to user email for password reset',
+    request=ForgotPasswordSerializer,
+    responses={
+        200: {
+            'type': 'object',
+            'properties': {
+                'status': {'type': 'string'},
+                'message': {'type': 'string'}
+            }
+        },
+        400: {'description': 'Invalid email or user not found'}
+    }
+)
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def forgot_password_view(request):
+    """Send OTP to user's email for password reset"""
+    serializer = ForgotPasswordSerializer(data=request.data)
+    if serializer.is_valid():
+        email = serializer.validated_data['email']
+
+        # Generate 6-digit OTP
+        import random
+        from django.utils import timezone
+        from datetime import timedelta
+        from django.core.mail import send_mail
+        from django.conf import settings
+
+        otp = ''.join([str(random.randint(0, 9)) for _ in range(6)])
+
+        # Create OTP record with 10 minutes expiration
+        expires_at = timezone.now() + timedelta(minutes=10)
+        PasswordResetOTP.objects.create(
+            email=email,
+            otp=otp,
+            expires_at=expires_at
+        )
+
+        # Send email
+        try:
+            subject = 'Password Reset OTP - EdgeSync'
+            message = f'''
+Hello,
+
+You have requested to reset your password for EdgeSync.
+
+Your OTP is: {otp}
+
+This OTP will expire in 10 minutes.
+
+If you did not request this, please ignore this email.
+
+Best regards,
+EdgeSync Team
+            '''
+
+            send_mail(
+                subject,
+                message,
+                settings.EMAIL_HOST_USER,
+                [email],
+                fail_silently=False,
+            )
+
+            return Response({
+                'status': 'success',
+                'message': 'OTP sent to your email address.'
+            })
+        except Exception as e:
+            return Response({
+                'status': 'error',
+                'message': f'Failed to send email: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@extend_schema(
+    operation_id='verify_otp',
+    tags=['Authentication'],
+    summary='Verify OTP',
+    description='Verify the OTP sent to user email',
+    request=VerifyOTPSerializer,
+    responses={
+        200: {
+            'type': 'object',
+            'properties': {
+                'status': {'type': 'string'},
+                'message': {'type': 'string'}
+            }
+        },
+        400: {'description': 'Invalid or expired OTP'}
+    }
+)
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def verify_otp_view(request):
+    """Verify OTP for password reset"""
+    serializer = VerifyOTPSerializer(data=request.data)
+    if serializer.is_valid():
+        return Response({
+            'status': 'success',
+            'message': 'OTP verified successfully.'
+        })
+
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@extend_schema(
+    operation_id='reset_password',
+    tags=['Authentication'],
+    summary='Reset Password',
+    description='Reset user password with verified OTP',
+    request=ResetPasswordSerializer,
+    responses={
+        200: {
+            'type': 'object',
+            'properties': {
+                'status': {'type': 'string'},
+                'message': {'type': 'string'}
+            }
+        },
+        400: {'description': 'Invalid OTP or password validation failed'}
+    }
+)
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def reset_password_view(request):
+    """Reset password with OTP verification"""
+    serializer = ResetPasswordSerializer(data=request.data)
+    if serializer.is_valid():
+        email = serializer.validated_data['email']
+        new_password = serializer.validated_data['new_password']
+        otp_instance = serializer.validated_data['otp_instance']
+
+        try:
+            # Get user and update password
+            user = User.objects.get(email=email)
+            user.set_password(new_password)
+            user.save()
+
+            # Mark OTP as used
+            otp_instance.is_used = True
+            otp_instance.save()
+
+            return Response({
+                'status': 'success',
+                'message': 'Password reset successfully.'
+            })
+        except User.DoesNotExist:
+            return Response({
+                'status': 'error',
+                'message': 'User not found.'
+            }, status=status.HTTP_404_NOT_FOUND)
+
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

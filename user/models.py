@@ -353,3 +353,30 @@ class UserACL(models.Model):
     
     def __str__(self):
         return f"{self.user.username} - {self.topic_pattern} ({self.get_access_type_display()})"
+
+
+class PasswordResetOTP(models.Model):
+    """Model for storing password reset OTPs"""
+
+    email = models.EmailField(help_text="User email for password reset")
+    otp = models.CharField(max_length=6, help_text="6-digit OTP code")
+    created_at = models.DateTimeField(default=timezone.now)
+    expires_at = models.DateTimeField(help_text="OTP expiration time")
+    is_used = models.BooleanField(default=False, help_text="Whether OTP has been used")
+    attempts = models.IntegerField(default=0, help_text="Number of verification attempts")
+
+    class Meta:
+        db_table = 'password_reset_otps'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['email', '-created_at']),
+            models.Index(fields=['otp', 'email']),
+        ]
+
+    def __str__(self):
+        return f"{self.email} - OTP at {self.created_at}"
+
+    def is_valid(self):
+        """Check if OTP is still valid (not expired and not used)"""
+        from django.utils import timezone
+        return not self.is_used and self.expires_at > timezone.now() and self.attempts < 3
