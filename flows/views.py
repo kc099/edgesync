@@ -374,7 +374,6 @@ class FlowDiagramViewSet(viewsets.ModelViewSet):
                         'message': 'No recent device data available (last 5 minutes)'
                     })
             except Exception as device_error:
-                print(f"Error checking device data: {device_error}")
                 return Response({
                     'node_id': node_id,
                     'output': None,
@@ -471,20 +470,16 @@ class FlowDiagramViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'], url_path='nodes/(?P<node_id>.*)/create-widget')
     def create_widget_from_node(self, request, uuid=None, node_id=None):
         """Create a dashboard widget from flow node output - simplified approach"""
-        print(f"🎯 create_widget_from_node called: uuid={uuid}, node_id={node_id}")
-        print(f"📥 Request data: {request.data}")
-        
         flow = self.get_object()
-        print(f"📊 Flow loaded: {flow.name}")
-        
+
         try:
             from user.models import DashboardTemplate
             from datetime import datetime
             import uuid as uuid_lib
-            
+
             # Extract widget configuration from request
             widget_config = request.data
-            
+
             # Validate required fields
             required_fields = ['dashboard_uuid', 'widget_type', 'widget_title']
             for field in required_fields:
@@ -547,62 +542,42 @@ class FlowDiagramViewSet(viewsets.ModelViewSet):
 
             # If this is a device node with a variable, register TrackedVariable
             try:
-                node_map = {n['id']: n for n in flow.nodes}
-                node_cfg = node_map.get(node_id, {})
-                node_data = node_cfg.get('data', {})
-                
-                print(f"🔧 Node configuration: {node_cfg}")
-                print(f"📋 Node data: {node_data}")
-                
-                # Check if this is a device node
-                if node_data.get('category') == 'device' or node_data.get('nodeType'):
-                    # Extract device UUID from node_id (first 5 parts of UUID)
-                    parts = node_id.split('-')
-                    if len(parts) >= 5:
-                        device_uuid = '-'.join(parts[:5])
-                        print(f"📱 Extracted device UUID: {device_uuid}")
-                        
-                        # Verify device exists
-                        from sensors.models import Device
-                        try:
-                            device = Device.objects.get(uuid=device_uuid)
-                            print(f"✅ Device found: {device.name}")
-                            
-                            # Get sensor variable - try multiple sources
-                            sensor_var = (
-                                node_data.get('config', {}).get('variable') or
-                                node_data.get('variable') or
-                                widget_config.get('sensor_variable') or
-                                'temperature'  # Default fallback
+                parts = node_id.split('-')
+                if len(parts) >= 5:
+                    device_uuid = '-'.join(parts[:5])
+
+                    from sensors.models import Device
+                    try:
+                        device = Device.objects.get(uuid=device_uuid)
+
+                        node_map = {n['id']: n for n in flow.nodes}
+                        node_cfg = node_map.get(node_id, {})
+                        node_data = node_cfg.get('data', {})
+
+                        sensor_var = (
+                            widget_config.get('sensor_variable') or
+                            node_data.get('config', {}).get('variable') or
+                            node_data.get('variable') or
+                            None
+                        )
+
+                        if sensor_var and sensor_var.strip():
+                            from sensors.models import TrackedVariable
+                            tracked_var, created = TrackedVariable.objects.update_or_create(
+                                device_id=device_uuid,
+                                sensor_type=sensor_var,
+                                widget_id=widget_id,
+                                defaults={
+                                    'dashboard_uuid': widget_config['dashboard_uuid'],
+                                    'max_samples': 50,
+                                }
                             )
-                            print(f"🌡️ Using sensor variable: {sensor_var}")
-                            
-                            if sensor_var and sensor_var.strip():
-                                from sensors.models import TrackedVariable
-                                tracked_var, created = TrackedVariable.objects.update_or_create(
-                                    device_id=device_uuid,  # Use device UUID
-                                    sensor_type=sensor_var,
-                                    widget_id=widget_id,
-                                    defaults={
-                                        'dashboard_uuid': widget_config['dashboard_uuid'],
-                                        'max_samples': 50,
-                                    }
-                                )
-                                print(f"📊 TrackedVariable {'created' if created else 'updated'}: {tracked_var}")
-                            else:
-                                print("⚠️ No sensor variable specified")
-                                
-                        except Device.DoesNotExist:
-                            print(f"❌ Device with UUID {device_uuid} not found")
-                    else:
-                        print(f"❌ Invalid node_id format: {node_id}")
-                else:
-                    print(f"ℹ️ Node is not a device node: {node_data.get('category', 'unknown')}")
-                    
+
+                    except Device.DoesNotExist:
+                        pass
+
             except Exception as tv_err:
-                import traceback
-                print(f"🚨 TrackedVariable create failed: {tv_err}")
-                print(f"🔍 TrackedVariable traceback: {traceback.format_exc()}")
+                pass
             
             # Add widget to dashboard widgets list
             if not dashboard.widgets:
@@ -627,9 +602,6 @@ class FlowDiagramViewSet(viewsets.ModelViewSet):
             })
             
         except Exception as e:
-            import traceback
-            print(f"🚨 ERROR in create_widget_from_node: {type(e).__name__}: {str(e)}")
-            print(f"🔍 Traceback: {traceback.format_exc()}")
             return Response({
                 'error': str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

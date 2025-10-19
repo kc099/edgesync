@@ -25,7 +25,7 @@ for sensitive sensor types while keeping metadata readable.
 """
 
 WS_URL = os.getenv("WS_URL", "ws://localhost:8000/ws/sensors/")
-DEVICE_TOKEN = os.getenv("DEVICE_TOKEN")  # must be provided via env
+DEVICE_TOKEN = os.getenv("DEVICE_TOKEN", "XWDWdQkDdmExLbBDKPAQu7dULLPp1dEYaj9l2FKHq9A")  # must be provided via env
 SEND_INTERVAL = float(os.getenv("SEND_INTERVAL", "2"))  # seconds
 ENABLE_ENCRYPTION = os.getenv("ENABLE_ENCRYPTION", "false").lower() == "true"
 
