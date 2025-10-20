@@ -1219,9 +1219,26 @@ def dashboard_template_detail_view(request, template_uuid):
                 }, status=status.HTTP_403_FORBIDDEN)
             
             if request.method == 'PUT':
+                old_widget_ids = {w.get('id') for w in template.widgets or []}
+
                 serializer = DashboardTemplateSerializer(template, data=request.data, partial=True)
                 if serializer.is_valid():
-                    serializer.save()
+                    updated_template = serializer.save()
+
+                    new_widget_ids = {w.get('id') for w in updated_template.widgets or []}
+                    deleted_widget_ids = old_widget_ids - new_widget_ids
+
+                    if deleted_widget_ids:
+                        from sensors.models import TrackedVariable, WidgetSample
+                        for widget_id in deleted_widget_ids:
+                            tracked_vars = TrackedVariable.objects.filter(
+                                widget_id=widget_id,
+                                dashboard_uuid=template.uuid
+                            )
+                            for tv in tracked_vars:
+                                WidgetSample.objects.filter(widget=tv).delete()
+                            tracked_vars.delete()
+
                     return Response({
                         'template': serializer.data,
                         'status': 'success'
@@ -1233,6 +1250,18 @@ def dashboard_template_detail_view(request, template_uuid):
                     }, status=status.HTTP_400_BAD_REQUEST)
             
             elif request.method == 'DELETE':
+                from sensors.models import TrackedVariable, WidgetSample
+                widget_ids = [w.get('id') for w in template.widgets or []]
+
+                for widget_id in widget_ids:
+                    tracked_vars = TrackedVariable.objects.filter(
+                        widget_id=widget_id,
+                        dashboard_uuid=template.uuid
+                    )
+                    for tv in tracked_vars:
+                        WidgetSample.objects.filter(widget=tv).delete()
+                    tracked_vars.delete()
+
                 template.delete()
                 return Response({
                     'message': 'Template deleted successfully',
