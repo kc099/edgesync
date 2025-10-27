@@ -8,18 +8,21 @@ server {
     add_header X-Content-Type-Options "nosniff" always;
     add_header Referrer-Policy "no-referrer-when-downgrade" always;
 
+    root /var/www/app/das/build;
+    index index.html;
+    include /etc/nginx/mime.types;
+
     # React app static files (built by 'npm run build')
     # These are completely separate from Django's static files
     location / {
-        root /var/www/app/das/build;
         try_files $uri $uri/ /index.html;
-        
+    }
         # Cache static assets (JS, CSS, images from React build)
-        location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg)$ {
+    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg)$ {
             expires 1y;
             add_header Cache-Control "public, immutable";
-        }
     }
+    
 
     # Django API endpoints
     location /api/ {
