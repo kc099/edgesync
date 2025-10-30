@@ -1,0 +1,11 @@
+sudo apt-get update
+sudo apt-get install -y software-properties-common
+
+sudo add-apt-repository ppa:mosquitto-dev/mosquitto-ppa -y
+
+sudo apt-get update
+
+sudo apt-get install mosquitto-clients mosquitto -y
+
+#download mosquitto-go-auth plugin
+wget https://github.com/iegomez/mosquitto-go-auth/releases/download/3.0.0/mosquitto-go-auth_3.0.0_linux_amd64.zip
