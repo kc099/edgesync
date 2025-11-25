@@ -179,7 +179,7 @@ def set_mqtt_password(request):
                 cluster_type='hosted',
                 defaults={
                     'name': 'Free #1',
-                    'host': '13.203.165.247',
+                    'host': '13.203.2.58',
                     'port': 1883,
                     'username': username,
                     'password': password or '',  # Use empty string if password is None
@@ -728,7 +728,7 @@ def user_mqtt_info(request):
             'subscriptionType': profile.subscription_type if hasattr(profile, 'subscription_type') else 'free',
             'deviceLimit': profile.device_limit if hasattr(profile, 'device_limit') else 5,
             'broker': {
-                'host': '13.203.165.247',
+                'host': '13.203.2.58',
                 'port': 1883,
                 'websocketPort': 1884
             }
