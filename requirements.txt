@@ -1,14 +1,31 @@
-Django==4.2.7
-channels==4.0.0
-channels-redis==4.1.0
-daphne==4.0.0
-django-cors-headers==4.3.1
-django-filter==23.3
-djangorestframework==3.14.0
-django-allauth==0.57.0
-python-dotenv==1.0.0
-websockets==11.0.3
-cryptography==41.0.7
-djangorestframework-simplejwt==5.3.0
-drf-spectacular==0.27.0
-google-auth==2.23.4 
+# Django Core
+Django==5.1.5
+python-dotenv==1.0.1
+
+# Django REST Framework
+djangorestframework==3.15.2
+djangorestframework-simplejwt==5.4.1
+drf-spectacular==0.28.0
+
+# Django Extensions
+django-cors-headers==4.6.0
+django-filter==24.3
+django-allauth==65.3.0
+
+# Channels (WebSocket support)
+channels==4.2.0
+channels-redis==4.2.1
+daphne==4.1.2
+
+# Database
+PyMySQL==1.1.1
+
+# MQTT
+paho-mqtt==2.1.0
+
+# Security & Encryption
+cryptography==44.0.0
+
+# Utilities
+websockets==14.1
+google-auth==2.37.0

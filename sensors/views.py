@@ -2,6 +2,7 @@ from django.shortcuts import render
 from django.http import JsonResponse
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.csrf import csrf_exempt
+from django.conf import settings
 from rest_framework import generics, filters, status, viewsets, serializers
 from rest_framework.decorators import api_view, permission_classes, action
 from rest_framework.permissions import IsAuthenticated
@@ -12,7 +13,7 @@ from drf_spectacular.openapi import OpenApiTypes
 from .models import MqttCluster, MqttTopic, MqttActivity, Device
 from user.models import MosquittoUser, UserProfile, Organization
 from .serializers import (
-    MqttClusterSerializer, MqttClusterListSerializer, 
+    MqttClusterSerializer, MqttClusterListSerializer,
     MqttTopicSerializer, MqttActivitySerializer, ACLSerializer,
     MqttPasswordSerializer, DeviceSerializer, DeviceListSerializer,
     DeviceCreateSerializer, DeviceUpdateSerializer, DeviceProjectAssignmentSerializer
@@ -179,8 +180,8 @@ def set_mqtt_password(request):
                 cluster_type='hosted',
                 defaults={
                     'name': 'Free #1',
-                    'host': '13.203.2.58',
-                    'port': 1883,
+                    'host': settings.MQTT_BROKER_HOST,
+                    'port': settings.MQTT_BROKER_PORT,
                     'username': username,
                     'password': password or '',  # Use empty string if password is None
                 }
@@ -728,9 +729,9 @@ def user_mqtt_info(request):
             'subscriptionType': profile.subscription_type if hasattr(profile, 'subscription_type') else 'free',
             'deviceLimit': profile.device_limit if hasattr(profile, 'device_limit') else 5,
             'broker': {
-                'host': '13.203.2.58',
-                'port': 1883,
-                'websocketPort': 1884
+                'host': settings.MQTT_BROKER_HOST,
+                'port': settings.MQTT_BROKER_PORT,
+                'websocketPort': settings.MQTT_BROKER_WEBSOCKET_PORT
             }
         })
         

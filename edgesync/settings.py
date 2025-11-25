@@ -30,12 +30,14 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'django-insecure-1v&1lzjwd+qd=x+f$zno4@ydp$@%y1pey!2do9pn(eb5(b^3ly')
+SECRET_KEY = os.getenv('SECRET_KEY')
+if not SECRET_KEY:
+    raise ValueError("SECRET_KEY environment variable is not set in .env file")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv('DJANGO_DEBUG', 'True').lower() == 'true'
+DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
 
-ALLOWED_HOSTS = os.getenv('DJANGO_ALLOWED_HOSTS', '*').split(',')
+ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '').split(',') if os.getenv('ALLOWED_HOSTS') else []
 
 
 # Application definition
@@ -107,16 +109,25 @@ DATABASES = {
     },
     "mosquitto": {
         "ENGINE": "django.db.backends.mysql",
-        "NAME": os.getenv('MOSQUITTO_DB_NAME', 'mosquittoauth'),
-        "USER": os.getenv('MOSQUITTO_DB_USER', 'kc099'),
-        "PASSWORD": os.getenv('MOSQUITTO_DB_PASSWORD', 'Roboworks23!'),
-        "HOST": os.getenv('MOSQUITTO_DB_HOST', '68.178.150.182'),
+        "NAME": os.getenv('MOSQUITTO_DB_NAME'),
+        "USER": os.getenv('MOSQUITTO_DB_USER'),
+        "PASSWORD": os.getenv('MOSQUITTO_DB_PASSWORD'),
+        "HOST": os.getenv('MOSQUITTO_DB_HOST'),
         "PORT": os.getenv('MOSQUITTO_DB_PORT', '3306'),
         "OPTIONS": {
             "charset": "utf8mb4",
         },
     }
 }
+
+# Validate required database environment variables
+if not all([
+    os.getenv('MOSQUITTO_DB_NAME'),
+    os.getenv('MOSQUITTO_DB_USER'),
+    os.getenv('MOSQUITTO_DB_PASSWORD'),
+    os.getenv('MOSQUITTO_DB_HOST'),
+]):
+    raise ValueError("MOSQUITTO database credentials are missing from .env file")
 
 # drf-spectacular settings for Swagger/OpenAPI documentation
 SPECTACULAR_SETTINGS = {
@@ -175,8 +186,8 @@ SPECTACULAR_SETTINGS = {
     },
     'SERVERS': [
         {
-            'url': 'http://localhost:8000',
-            'description': 'Development server'
+            'url': os.getenv('API_BASE_URL', 'http://localhost:8000'),
+            'description': 'API server'
         },
     ],
 }
@@ -277,10 +288,7 @@ SIMPLE_JWT = {
 }
 
 # CORS settings for React frontend
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",  # React development server
-    "http://127.0.0.1:3000",
-]
+CORS_ALLOWED_ORIGINS = os.getenv('CORS_ALLOWED_ORIGINS', '').split(',') if os.getenv('CORS_ALLOWED_ORIGINS') else []
 
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_ALL_ORIGINS = DEBUG  # Only allow all origins in debug mode
@@ -297,10 +305,10 @@ SITE_ID = 1
 ACCOUNT_EMAIL_REQUIRED = True
 ACCOUNT_USERNAME_REQUIRED = False
 ACCOUNT_AUTHENTICATION_METHOD = 'email'
-ACCOUNT_EMAIL_VERIFICATION = 'none'  # For development
+ACCOUNT_EMAIL_VERIFICATION = os.getenv('ACCOUNT_EMAIL_VERIFICATION', 'none')
 ACCOUNT_UNIQUE_EMAIL = True
 ACCOUNT_SESSION_REMEMBER = True
-ACCOUNT_DEFAULT_HTTP_PROTOCOL = 'http'  # For development
+ACCOUNT_DEFAULT_HTTP_PROTOCOL = os.getenv('ACCOUNT_DEFAULT_HTTP_PROTOCOL', 'http')
 
 # Skip intermediate page and go directly to Google OAuth
 SOCIALACCOUNT_LOGIN_ON_GET = True
@@ -344,8 +352,35 @@ DEVICE_ENCRYPTION_ENABLED = True
 # Email Configuration for Password Reset
 EMAIL_BACKEND = os.getenv('EMAIL_BACKEND', 'django.core.mail.backends.smtp.EmailBackend')
 EMAIL_HOST = os.getenv('EMAIL_HOST', 'smtp.gmail.com')
-EMAIL_PORT = int(os.getenv('EMAIL_PORT', 587))
+EMAIL_PORT = int(os.getenv('EMAIL_PORT', '587'))
 EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'True').lower() == 'true'
 EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
 EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
 DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', EMAIL_HOST_USER)
+
+# MQTT Broker Configuration
+MQTT_BROKER_HOST = os.getenv('MQTT_BROKER_HOST')
+MQTT_BROKER_PORT = int(os.getenv('MQTT_BROKER_PORT', '1883'))
+MQTT_BROKER_WEBSOCKET_PORT = int(os.getenv('MQTT_BROKER_WEBSOCKET_PORT', '1884'))
+
+# Validate MQTT broker host is set
+if not MQTT_BROKER_HOST:
+    raise ValueError("MQTT_BROKER_HOST environment variable is not set in .env file")
+
+# HTTPS/Production Security Settings
+SECURE_SSL_REDIRECT = os.getenv('SECURE_SSL_REDIRECT', 'False').lower() == 'true'
+SESSION_COOKIE_SECURE = os.getenv('SESSION_COOKIE_SECURE', 'False').lower() == 'true'
+CSRF_COOKIE_SECURE = os.getenv('CSRF_COOKIE_SECURE', 'False').lower() == 'true'
+SECURE_BROWSER_XSS_FILTER = os.getenv('SECURE_BROWSER_XSS_FILTER', 'True').lower() == 'true'
+SECURE_CONTENT_TYPE_NOSNIFF = os.getenv('SECURE_CONTENT_TYPE_NOSNIFF', 'True').lower() == 'true'
+
+# Parse SECURE_PROXY_SSL_HEADER if set (format: "HEADER_NAME,value")
+if os.getenv('SECURE_PROXY_SSL_HEADER'):
+    header_value = os.getenv('SECURE_PROXY_SSL_HEADER')
+    if ',' in header_value:
+        header_name, header_val = header_value.split(',', 1)
+        SECURE_PROXY_SSL_HEADER = (f'HTTP_{header_name}', header_val)
+    else:
+        SECURE_PROXY_SSL_HEADER = None
+else:
+    SECURE_PROXY_SSL_HEADER = None
