@@ -1,6 +1,6 @@
 server {
     listen 80;
-    server_name roboworksautomation.com www.roboworksautomation.com;  # Replace with your domain
+    server_name roboworksautomation.in www.roboworksautomation.in;
 
     # Security headers
     add_header X-Frame-Options "SAMEORIGIN" always;
