@@ -5,6 +5,87 @@ import json
 import uuid
 import secrets
 
+
+# ---------------------------------------------------------------------------
+# Mosquitto MQTT Authentication Models (stored in mosquitto MySQL database)
+# ---------------------------------------------------------------------------
+
+class MosquittoUser(models.Model):
+    """MQTT user authentication table for Mosquitto broker"""
+    
+    username = models.CharField(max_length=100, unique=True)
+    password = models.TextField(help_text="PBKDF2 hashed password")
+    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
+    
+    class Meta:
+        db_table = 'mosquitto_users'
+    
+    def __str__(self):
+        return self.username
+
+
+class MosquittoACL(models.Model):
+    """MQTT Access Control List for topic permissions"""
+    
+    ACCESS_CHOICES = [
+        (1, 'Read'),
+        (2, 'Write'),
+        (3, 'Read/Write'),
+        (4, 'Subscribe'),
+    ]
+    
+    username = models.CharField(max_length=100)
+    topic = models.TextField(help_text="MQTT topic pattern")
+    rw = models.IntegerField(choices=ACCESS_CHOICES, help_text="Read/Write permissions")
+    
+    class Meta:
+        db_table = 'mosquitto_acls'
+        unique_together = [('username', 'topic', 'rw')]
+    
+    def __str__(self):
+        return f"{self.username} - {self.topic} ({self.get_rw_display()})"
+
+
+class MosquittoSuperuser(models.Model):
+    """MQTT superuser table for Mosquitto broker"""
+    
+    username = models.CharField(max_length=100, unique=True)
+    is_superuser = models.BooleanField(default=False)
+    
+    class Meta:
+        db_table = 'mosquitto_superusers'
+    
+    def __str__(self):
+        return f"{self.username} (Superuser: {self.is_superuser})"
+
+
+class UserACL(models.Model):
+    """User-based MQTT Access Control List"""
+    
+    ACCESS_CHOICES = [
+        (1, 'Read'),
+        (2, 'Write'),
+        (3, 'Read/Write'),
+        (4, 'Subscribe'),
+    ]
+    
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    topic_pattern = models.TextField(help_text="MQTT topic pattern (e.g., iot/tenant_001/+/+)")
+    access_type = models.IntegerField(choices=ACCESS_CHOICES)
+    created_at = models.DateTimeField(default=timezone.now)
+    
+    class Meta:
+        db_table = 'user_acls'
+        unique_together = [('user', 'topic_pattern', 'access_type')]
+    
+    def __str__(self):
+        return f"{self.user.username} - {self.topic_pattern}"
+
+
+# ---------------------------------------------------------------------------
+# Sensor Data Models
+# ---------------------------------------------------------------------------
+
 class SensorData(models.Model):
     """Model to store sensor data received from ESP32 devices"""
     

@@ -4,7 +4,7 @@ class DatabaseRouter:
     """
     
     mosquitto_models = {
-        'mosquittouser', 'mosquittoacl', 'mosquittosuperuser'
+        'mosquittouser', 'mosquittoacl', 'mosquittosuperuser', 'useracl'
     }
     
     def db_for_read(self, model, **hints):

@@ -1,0 +1,110 @@
+╔════════════════════════════════════════════════════════════════╗
+║        AWS LIGHTSAIL MIGRATION FIX - QUICK REFERENCE           ║
+╚════════════════════════════════════════════════════════════════╝
+
+📋 PROBLEM: "table user_acls already exists" error during migration
+
+🔧 ROOT CAUSE:
+   - Missing model definitions in sensors/models.py
+   - UserACL not in database router's mosquitto_models set
+   - Tables created in wrong database (SQLite instead of MySQL)
+
+✅ FIXES APPLIED (on local development):
+   1. Added 4 Mosquitto models to sensors/models.py:
+      • MosquittoUser
+      • MosquittoACL
+      • MosquittoSuperuser
+      • UserACLst
+   
+   2. Updated edgesync/db_router.py:
+      • Added 'useracl' to mosquitto_models set
+   
+   3. Created helper scripts:
+      • test_db_routing.py - Test routing locally
+      • fix_migration_aws.sh - Automated fix for AWS
+      • FIX_MIGRATION_AWS.md - Detailed guide
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🚀 DEPLOYMENT TO AWS LIGHTSAIL:
+
+Step 1: Upload updated code
+────────────────────────────
+scp -r /Users/krishnac/Work/Website_work/das/edgesync/ user@your-server:/var/www/app/
+
+Step 2: Connect to server
+──────────────────────────
+ssh user@your-lightsail-server
+cd /var/www/app/edgesync
+
+Step 3: Run automated fix
+──────────────────────────
+chmod +x fix_migration_aws.sh
+./fix_migration_aws.sh
+
+OR manually:
+
+# Clean SQLite
+sqlite3 db.sqlite3 "DROP TABLE IF EXISTS user_acls; DROP TABLE IF EXISTS mosquitto_users; DROP TABLE IF EXISTS mosquitto_acls; DROP TABLE IF EXISTS mosquitto_superusers;"
+
+# Rollback
+python manage.py migrate sensors 0001
+
+# Migrate both databases
+python manage.py migrate --database=default
+python manage.py migrate --database=mosquitto
+
+Step 4: Restart services
+─────────────────────────
+sudo systemctl restart daphne
+
+Step 5: Verify
+──────────────
+python manage.py showmigrations sensors
+# All should show [X]
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🎯 VERIFICATION COMMANDS:
+
+Check SQLite (should be empty):
+sqlite3 db.sqlite3 ".tables" | grep -E "user_acls|mosquitto"
+
+Check MySQL (should have 4 tables):
+mysql -u $MOSQUITTO_DB_USER -p$MOSQUITTO_DB_PASSWORD -D $MOSQUITTO_DB_NAME -e "SHOW TABLES;"
+
+Expected in MySQL:
+  ✓ mosquitto_users
+  ✓ mosquitto_acls
+  ✓ mosquitto_superusers
+  ✓ user_acls
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⚠️  IF AUTOMATED FIX FAILS:
+
+Nuclear option (complete reset):
+1. Backup: python manage.py dumpdata > backup.json
+2. Delete: rm db.sqlite3
+3. Drop MySQL tables:
+   mysql -u USER -p DB_NAME -e "DROP TABLE IF EXISTS user_acls, mosquitto_users, mosquitto_acls, mosquitto_superusers;"
+4. Migrate: python manage.py migrate
+5. Restore: python manage.py loaddata backup.json
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📚 DOCUMENTATION:
+   • MIGRATION_FIX_SUMMARY.md - Complete explanation
+   • FIX_MIGRATION_AWS.md - Detailed troubleshooting
+   • test_db_routing.py - Test routing configuration
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+💡 KEY POINTS:
+   ✓ Models must exist in code BEFORE migrations can route them
+   ✓ Database router needs model names in lowercase
+   ✓ Mosquitto models -> MySQL database
+   ✓ Other models -> SQLite database
+   ✓ Always test locally before deploying
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
