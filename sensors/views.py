@@ -10,8 +10,8 @@ from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiParameter
 from drf_spectacular.openapi import OpenApiTypes
-from .models import MqttCluster, MqttTopic, MqttActivity, Device
-from user.models import MosquittoUser, UserProfile, Organization
+from .models import MqttCluster, MqttTopic, MqttActivity, Device, MosquittoUser
+from user.models import UserProfile, Organization
 from .serializers import (
     MqttClusterSerializer, MqttClusterListSerializer,
     MqttTopicSerializer, MqttActivitySerializer, ACLSerializer,

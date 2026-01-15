@@ -6,7 +6,7 @@ A real-time sensor data dashboard that receives data from ESP32 devices via WebS
 
 - ✅ **WebSocket Server**: Django Channels-based WebSocket endpoint for ESP32 connections
 - ✅ **Real-time Updates**: Live data streaming to web browsers
-- ✅ **Data Persistence**: Automatic storage of sensor readings in SQLite database
+- ✅ **Data Persistence**: Automatic storage of sensor readings in MySQL database
 - ✅ **REST API**: Historical data access via RESTful endpoints
 - ✅ **Beautiful Dashboard**: Modern, responsive web interface with real-time charts
 - ✅ **Multi-device Support**: Handle multiple ESP32 devices simultaneously
@@ -225,7 +225,8 @@ edgesync/
 ### Database Issues
 1. Run migrations: `python manage.py migrate`
 2. Check database permissions
-3. Verify SQLite file location
+3. Verify MySQL connection settings in .env file
+4. Ensure MySQL server is running
 
 ## Development
 

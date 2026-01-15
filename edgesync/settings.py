@@ -104,10 +104,6 @@ WSGI_APPLICATION = "edgesync.wsgi.application"
 
 DATABASES = {
     "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
-    },
-    "mosquitto": {
         "ENGINE": "django.db.backends.mysql",
         "NAME": os.getenv('MOSQUITTO_DB_NAME'),
         "USER": os.getenv('MOSQUITTO_DB_USER'),
@@ -127,7 +123,7 @@ if not all([
     os.getenv('MOSQUITTO_DB_PASSWORD'),
     os.getenv('MOSQUITTO_DB_HOST'),
 ]):
-    raise ValueError("MOSQUITTO database credentials are missing from .env file")
+    raise ValueError("Database credentials are missing from .env file")
 
 # drf-spectacular settings for Swagger/OpenAPI documentation
 SPECTACULAR_SETTINGS = {
@@ -191,10 +187,6 @@ SPECTACULAR_SETTINGS = {
         },
     ],
 }
-
-# Database routing
-DATABASE_ROUTERS = ['edgesync.db_router.DatabaseRouter']
-
 
 # Password validation
 # https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators

@@ -19,9 +19,26 @@ class MosquittoUser(models.Model):
     
     class Meta:
         db_table = 'mosquitto_users'
+        managed = True
     
     def __str__(self):
         return self.username
+    
+    @classmethod
+    def create_pbkdf2_password(cls, password):
+        """Create PBKDF2 password hash compatible with mosquitto-go-auth"""
+        import hashlib
+        import base64
+        import os
+        
+        salt = os.urandom(16)
+        iterations = 100000
+        hash_obj = hashlib.pbkdf2_hmac('sha512', password.encode(), salt, iterations)
+        
+        salt_b64 = base64.b64encode(salt).decode()
+        hash_b64 = base64.b64encode(hash_obj).decode()
+        
+        return f"PBKDF2$sha512${iterations}${salt_b64}${hash_b64}"
 
 
 class MosquittoACL(models.Model):
@@ -41,6 +58,7 @@ class MosquittoACL(models.Model):
     class Meta:
         db_table = 'mosquitto_acls'
         unique_together = [('username', 'topic', 'rw')]
+        managed = True
     
     def __str__(self):
         return f"{self.username} - {self.topic} ({self.get_rw_display()})"
@@ -54,6 +72,7 @@ class MosquittoSuperuser(models.Model):
     
     class Meta:
         db_table = 'mosquitto_superusers'
+        managed = True
     
     def __str__(self):
         return f"{self.username} (Superuser: {self.is_superuser})"
@@ -77,6 +96,7 @@ class UserACL(models.Model):
     class Meta:
         db_table = 'user_acls'
         unique_together = [('user', 'topic_pattern', 'access_type')]
+        managed = True
     
     def __str__(self):
         return f"{self.user.username} - {self.topic_pattern}"
