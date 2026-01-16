@@ -20,6 +20,7 @@ wheels/
 .installed.cfg
 *.egg
 .env
+
 # Django
 *.log
 local_settings.py
@@ -57,6 +58,19 @@ coverage.xml
 export_sql.py
 *.csv
 test-auth.py
-*.json
-db.sqlite3
 test_influxdb.py
+
+# Testing
+test-auth.py
+test_*.py
+
+# Database backups
+db*.sqlite3*
+
+# Logs
+logs/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
