@@ -88,7 +88,7 @@ class UserACL(models.Model):
         (4, 'Subscribe'),
     ]
     
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='mqtt_acls')
     topic_pattern = models.TextField(help_text="MQTT topic pattern (e.g., iot/tenant_001/+/+)")
     access_type = models.IntegerField(choices=ACCESS_CHOICES)
     created_at = models.DateTimeField(default=timezone.now)

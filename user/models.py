@@ -259,35 +259,6 @@ class DeviceHistory(models.Model):
         return f"{self.user.email} - {self.device_name} ({self.action}) at {self.timestamp}"
 
 
-class UserACL(models.Model):
-    """Model for user-based ACLs with topic patterns"""
-    
-    ACCESS_READ = 1
-    ACCESS_WRITE = 2  
-    ACCESS_READWRITE = 3
-    ACCESS_SUBSCRIBE = 4
-    
-    ACCESS_CHOICES = [
-        (ACCESS_READ, 'Read'),
-        (ACCESS_WRITE, 'Write'),
-        (ACCESS_READWRITE, 'Read/Write'), 
-        (ACCESS_SUBSCRIBE, 'Subscribe'),
-    ]
-    
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
-    topic_pattern = models.TextField(help_text="MQTT topic pattern (e.g., iot/tenant_001/+/+)")
-    access_type = models.IntegerField(choices=ACCESS_CHOICES)
-    created_at = models.DateTimeField(default=timezone.now)
-    
-    class Meta:
-        db_table = 'user_acls'
-        unique_together = ['user', 'topic_pattern', 'access_type']
-        managed = True
-    
-    def __str__(self):
-        return f"{self.user.username} - {self.topic_pattern} ({self.get_access_type_display()})"
-
-
 class PasswordResetOTP(models.Model):
     """Model for storing password reset OTPs"""
 
