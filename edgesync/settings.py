@@ -360,26 +360,16 @@ if not MQTT_BROKER_HOST:
     raise ValueError("MQTT_BROKER_HOST environment variable is not set in .env file")
 
 # HTTPS/Production Security Settings
-SECURE_SSL_REDIRECT = os.getenv('SECURE_SSL_REDIRECT', 'False').lower() == 'true'
+# Only enable SECURE_SSL_REDIRECT if you DON'T have a proxy handling redirects
+SECURE_SSL_REDIRECT = False  # Nginx already handles HTTP->HTTPS redirect
 SESSION_COOKIE_SECURE = os.getenv('SESSION_COOKIE_SECURE', 'False').lower() == 'true'
 CSRF_COOKIE_SECURE = os.getenv('CSRF_COOKIE_SECURE', 'False').lower() == 'true'
 SECURE_BROWSER_XSS_FILTER = os.getenv('SECURE_BROWSER_XSS_FILTER', 'True').lower() == 'true'
 SECURE_CONTENT_TYPE_NOSNIFF = os.getenv('SECURE_CONTENT_TYPE_NOSNIFF', 'True').lower() == 'true'
 
-# Parse SECURE_PROXY_SSL_HEADER if set (format: "HEADER_NAME,value")
-# This tells Django to trust the X-Forwarded-Proto header from Nginx
-# which indicates whether the original request was HTTP or HTTPS
-if os.getenv('SECURE_PROXY_SSL_HEADER'):
-    header_value = os.getenv('SECURE_PROXY_SSL_HEADER')
-    if ',' in header_value:
-        header_name, header_val = header_value.split(',', 1)
-        SECURE_PROXY_SSL_HEADER = (f'HTTP_{header_name}', header_val)
-    else:
-        SECURE_PROXY_SSL_HEADER = None
-else:
-    # Default: always trust X-Forwarded-Proto when behind a proxy
-    # This is safe if your proxy (Nginx) is the only one that can set this header
-    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+# SECURE_PROXY_SSL_HEADER tells Django to trust X-Forwarded-Proto from Nginx
+# Since Nginx sends X-Forwarded-Proto: https, Django should trust it
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 # Logging Configuration
 LOGGING = {
