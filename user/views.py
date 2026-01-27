@@ -15,6 +15,10 @@ from google.oauth2 import id_token
 from google.auth.transport import requests
 import json
 import os
+import logging
+
+# Setup logger
+logger = logging.getLogger(__name__)
 
 from .serializers import (
     LoginSerializer, SignupSerializer, UserSerializer,
@@ -130,18 +134,24 @@ def login_view(request):
         
         # Check if this is encrypted data
         if 'data' not in data or 'key' not in data or 'iv' not in data:
+            logger.warning("Login attempt without encrypted data")
             return Response({
                 'error': 'Encrypted authentication required. Please use a secure client.',
                 'status': 'error'
             }, status=status.HTTP_400_BAD_REQUEST)
         
         # Decrypt the data
+        logger.info("Attempting to decrypt login data")
         decrypted_data = encryption_manager.decrypt_request_data(data)
         if not decrypted_data:
+            logger.error("Failed to decrypt login data - check RSA key consistency")
             return Response({
-                'error': 'Failed to decrypt login data',
-                'status': 'error'
+                'error': 'Failed to decrypt login data. Please ensure your browser and server are using compatible encryption.',
+                'status': 'error',
+                'debug_hint': 'This usually indicates a key mismatch between frontend and backend. Check server logs for details.'
             }, status=status.HTTP_400_BAD_REQUEST)
+        
+        logger.info(f"Successfully decrypted login data for user: {decrypted_data.get('email', 'unknown')}")
         
         # Validate using serializer
         serializer = LoginSerializer(data=decrypted_data)
@@ -157,6 +167,7 @@ def login_view(request):
                 refresh = RefreshToken.for_user(user)
                 access_token = refresh.access_token
                 
+                logger.info(f"User logged in successfully: {user.email}")
                 return Response({
                     'token': str(access_token),
                     'refresh': str(refresh),
@@ -164,19 +175,22 @@ def login_view(request):
                     'status': 'success'
                 }, status=status.HTTP_200_OK)
             else:
+                logger.warning(f"Invalid login attempt for email: {email}")
                 return Response({
                     'error': {'non_field_errors': ['Invalid email or password.']},
                     'status': 'error'
                 }, status=status.HTTP_400_BAD_REQUEST)
         else:
+            logger.warning(f"Login validation failed: {serializer.errors}")
             return Response({
                 'error': serializer.errors,
                 'status': 'error'
             }, status=status.HTTP_400_BAD_REQUEST)
             
     except Exception as e:
+        logger.error(f"Login error: {str(e)}", exc_info=True)
         return Response({
-            'error': 'Authentication failed',
+            'error': 'Authentication failed. Please try again or contact support.',
             'status': 'error'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -235,18 +249,24 @@ def signup_view(request):
         
         # Check if this is encrypted data
         if 'data' not in data or 'key' not in data or 'iv' not in data:
+            logger.warning("Signup attempt without encrypted data")
             return Response({
                 'error': 'Encrypted authentication required. Please use a secure client.',
                 'status': 'error'
             }, status=status.HTTP_400_BAD_REQUEST)
         
         # Decrypt the data
+        logger.info("Attempting to decrypt signup data")
         decrypted_data = encryption_manager.decrypt_request_data(data)
         if not decrypted_data:
+            logger.error("Failed to decrypt signup data - check RSA key consistency")
             return Response({
-                'error': 'Failed to decrypt registration data',
-                'status': 'error'
+                'error': 'Failed to decrypt registration data. Please ensure your browser and server are using compatible encryption.',
+                'status': 'error',
+                'debug_hint': 'This usually indicates a key mismatch between frontend and backend. Check server logs for details.'
             }, status=status.HTTP_400_BAD_REQUEST)
+        
+        logger.info(f"Successfully decrypted signup data for user: {decrypted_data.get('email', 'unknown')}")
         
         # Validate using serializer
         serializer = SignupSerializer(data=decrypted_data)
@@ -257,6 +277,7 @@ def signup_view(request):
             refresh = RefreshToken.for_user(user)
             access_token = refresh.access_token
             
+            logger.info(f"User registered successfully: {user.email}")
             return Response({
                 'token': str(access_token),
                 'refresh': str(refresh),
@@ -264,14 +285,16 @@ def signup_view(request):
                 'status': 'success'
             }, status=status.HTTP_201_CREATED)
         else:
+            logger.warning(f"Signup validation failed: {serializer.errors}")
             return Response({
                 'error': serializer.errors,
                 'status': 'error'
             }, status=status.HTTP_400_BAD_REQUEST)
             
     except Exception as e:
+        logger.error(f"Signup error: {str(e)}", exc_info=True)
         return Response({
-            'error': 'Registration failed',
+            'error': 'Registration failed. Please try again or contact support.',
             'status': 'error'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 

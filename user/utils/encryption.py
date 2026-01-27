@@ -10,8 +10,12 @@ from cryptography.hazmat.backends import default_backend
 import base64
 import json
 import os
+import logging
 from django.core.cache import cache
 from django.conf import settings
+
+# Setup logger
+logger = logging.getLogger(__name__)
 
 
 class EncryptionManager:
@@ -37,6 +41,7 @@ class EncryptionManager:
         # Prefer file paths if provided (safer for multi-line PEMs)
         if env_private_file:
             try:
+                logger.info(f"Loading RSA private key from file: {env_private_file}")
                 with open(env_private_file, 'rb') as f:
                     private_bytes = f.read()
                 self._private_key = serialization.load_pem_private_key(
@@ -45,14 +50,16 @@ class EncryptionManager:
                     backend=self.backend
                 )
                 if env_public_file:
+                    logger.info(f"Loading RSA public key from file: {env_public_file}")
                     with open(env_public_file, 'rb') as f:
                         public_bytes = f.read()
                     self._public_key = serialization.load_pem_public_key(public_bytes, backend=self.backend)
                 else:
                     self._public_key = self._private_key.public_key()
+                logger.info("Successfully loaded RSA keypair from files")
                 return
             except Exception as e:
-                print(f"Failed to load RSA keys from files: {e}. Falling back to env/cache.")
+                logger.error(f"Failed to load RSA keys from files: {e}. Falling back to env/cache.")
         if env_private_pem:
             try:
                 self._private_key = serialization.load_pem_private_key(
@@ -67,9 +74,10 @@ class EncryptionManager:
                     )
                 else:
                     self._public_key = self._private_key.public_key()
+                logger.info("Successfully loaded RSA keypair from environment variables")
                 return
             except Exception as e:
-                print(f"Invalid RSA_PRIVATE_KEY_PEM in environment: {e}. Falling back to cache.")
+                logger.error(f"Invalid RSA_PRIVATE_KEY_PEM in environment: {e}. Falling back to cache.")
 
         try:
             # 2) Try to load from a shared cache backend
@@ -77,19 +85,22 @@ class EncryptionManager:
             public_key_pem = cache.get('rsa_public_key')
 
             if private_key_pem and public_key_pem:
+                logger.info("Loading RSA keypair from cache")
                 self._private_key = serialization.load_pem_private_key(
                     private_key_pem.encode(),
                     password=None,
                     backend=self.backend
                 )
                 self._public_key = self._private_key.public_key()
+                logger.info("Successfully loaded RSA keypair from cache")
                 return
 
             # 3) Generate new keypair (per-process if cache isn't shared)
+            logger.warning("No RSA keys found in env/files/cache. Generating new keypair (NOT RECOMMENDED for production)")
             self._generate_keypair()
 
         except Exception as e:
-            print(f"Error loading keypair from cache: {e}. Generating new keypair.")
+            logger.error(f"Error loading keypair from cache: {e}. Generating new keypair.")
             self._generate_keypair()
     
     def _generate_keypair(self):
@@ -207,18 +218,26 @@ class EncryptionManager:
             iv_hex = encrypted_data.get('iv')
             
             if not all([encrypted_aes_key_b64, iv_hex]):
+                logger.error("Missing required encryption components (key or iv)")
                 return None
             
+            logger.debug(f"Decrypting request data with {len(encrypted_form_data)} fields")
+            
             # Decrypt AES key with RSA private key
-            encrypted_aes_key = base64.b64decode(encrypted_aes_key_b64)
-            aes_key_hex = self._private_key.decrypt(
-                encrypted_aes_key,
-                padding.OAEP(
-                    mgf=padding.MGF1(algorithm=hashes.SHA256()),
-                    algorithm=hashes.SHA256(),
-                    label=None
-                )
-            ).decode('utf-8')
+            try:
+                encrypted_aes_key = base64.b64decode(encrypted_aes_key_b64)
+                aes_key_hex = self._private_key.decrypt(
+                    encrypted_aes_key,
+                    padding.OAEP(
+                        mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                        algorithm=hashes.SHA256(),
+                        label=None
+                    )
+                ).decode('utf-8')
+            except Exception as rsa_error:
+                logger.error(f"RSA decryption failed - possible key mismatch: {str(rsa_error)}")
+                logger.error("This usually means the frontend encrypted with a different public key than the backend's private key")
+                return None
             
             # Convert hex key back to bytes
             aes_key = bytes.fromhex(aes_key_hex)
@@ -231,16 +250,21 @@ class EncryptionManager:
                     # Decrypt this field
                     encrypted_value_b64 = value.get('data')
                     if encrypted_value_b64:
-                        decrypted_value = self.decrypt_aes(encrypted_value_b64, aes_key_hex, iv_hex)
-                        decrypted_data[field] = decrypted_value
+                        try:
+                            decrypted_value = self.decrypt_aes(encrypted_value_b64, aes_key_hex, iv_hex)
+                            decrypted_data[field] = decrypted_value
+                        except Exception as aes_error:
+                            logger.error(f"AES decryption failed for field '{field}': {str(aes_error)}")
+                            return None
                 else:
                     # Plain field
                     decrypted_data[field] = value
             
+            logger.info(f"Successfully decrypted {len(decrypted_data)} fields")
             return decrypted_data
             
         except Exception as e:
-            print(f"Decryption error: {e}")
+            logger.error(f"Unexpected decryption error: {str(e)}", exc_info=True)
             return None
 
 
