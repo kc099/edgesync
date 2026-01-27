@@ -11,6 +11,7 @@ import base64
 import json
 import os
 from django.core.cache import cache
+from django.conf import settings
 
 
 class EncryptionManager:
@@ -21,26 +22,74 @@ class EncryptionManager:
         self._load_or_generate_keypair()
     
     def _load_or_generate_keypair(self):
-        """Load existing keypair or generate new one"""
+        """Load RSA keypair from env, cache, or generate a new one.
+        Priority:
+        1) Environment variable `RSA_PRIVATE_KEY_PEM` (and optional `RSA_PUBLIC_KEY_PEM`)
+        2) Shared cache keys `rsa_private_key` / `rsa_public_key`
+        3) Generate new keypair and cache it (best-effort)
+        """
+        # 1) Try environment variables or files first to ensure cross-worker consistency
+        env_private_file = os.getenv('RSA_PRIVATE_KEY_FILE')
+        env_public_file = os.getenv('RSA_PUBLIC_KEY_FILE')
+        env_private_pem = os.getenv('RSA_PRIVATE_KEY_PEM')
+        env_public_pem = os.getenv('RSA_PUBLIC_KEY_PEM')
+
+        # Prefer file paths if provided (safer for multi-line PEMs)
+        if env_private_file:
+            try:
+                with open(env_private_file, 'rb') as f:
+                    private_bytes = f.read()
+                self._private_key = serialization.load_pem_private_key(
+                    private_bytes,
+                    password=None,
+                    backend=self.backend
+                )
+                if env_public_file:
+                    with open(env_public_file, 'rb') as f:
+                        public_bytes = f.read()
+                    self._public_key = serialization.load_pem_public_key(public_bytes, backend=self.backend)
+                else:
+                    self._public_key = self._private_key.public_key()
+                return
+            except Exception as e:
+                print(f"Failed to load RSA keys from files: {e}. Falling back to env/cache.")
+        if env_private_pem:
+            try:
+                self._private_key = serialization.load_pem_private_key(
+                    env_private_pem.encode(),
+                    password=None,
+                    backend=self.backend
+                )
+                # Use provided public key or derive from private
+                if env_public_pem:
+                    self._public_key = serialization.load_pem_public_key(
+                        env_public_pem.encode(), backend=self.backend
+                    )
+                else:
+                    self._public_key = self._private_key.public_key()
+                return
+            except Exception as e:
+                print(f"Invalid RSA_PRIVATE_KEY_PEM in environment: {e}. Falling back to cache.")
+
         try:
-            # Try to load from cache first
+            # 2) Try to load from a shared cache backend
             private_key_pem = cache.get('rsa_private_key')
             public_key_pem = cache.get('rsa_public_key')
-            
+
             if private_key_pem and public_key_pem:
                 self._private_key = serialization.load_pem_private_key(
-                    private_key_pem.encode(), 
-                    password=None, 
+                    private_key_pem.encode(),
+                    password=None,
                     backend=self.backend
                 )
                 self._public_key = self._private_key.public_key()
                 return
-                
-            # Generate new keypair
+
+            # 3) Generate new keypair (per-process if cache isn't shared)
             self._generate_keypair()
-            
+
         except Exception as e:
-            print(f"Error loading keypair: {e}")
+            print(f"Error loading keypair from cache: {e}. Generating new keypair.")
             self._generate_keypair()
     
     def _generate_keypair(self):
