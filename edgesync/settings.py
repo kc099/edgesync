@@ -13,11 +13,9 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 from pathlib import Path
 import os
 from dotenv import load_dotenv
-import pymysql
 from datetime import timedelta
 
-# Use PyMySQL as MySQL adapter
-pymysql.install_as_MySQLdb()
+# Using SQLite as the default database backend for Django
 
 # Load environment variables from .env file
 load_dotenv()
@@ -104,26 +102,10 @@ WSGI_APPLICATION = "edgesync.wsgi.application"
 
 DATABASES = {
     "default": {
-        "ENGINE": "django.db.backends.mysql",
-        "NAME": os.getenv('MOSQUITTO_DB_NAME'),
-        "USER": os.getenv('MOSQUITTO_DB_USER'),
-        "PASSWORD": os.getenv('MOSQUITTO_DB_PASSWORD'),
-        "HOST": os.getenv('MOSQUITTO_DB_HOST'),
-        "PORT": os.getenv('MOSQUITTO_DB_PORT', '3306'),
-        "OPTIONS": {
-            "charset": "utf8mb4",
-        },
+        "ENGINE": "django.db.backends.sqlite3",
+        "NAME": BASE_DIR / "db.sqlite3",
     }
 }
-
-# Validate required database environment variables
-if not all([
-    os.getenv('MOSQUITTO_DB_NAME'),
-    os.getenv('MOSQUITTO_DB_USER'),
-    os.getenv('MOSQUITTO_DB_PASSWORD'),
-    os.getenv('MOSQUITTO_DB_HOST'),
-]):
-    raise ValueError("Database credentials are missing from .env file")
 
 # drf-spectacular settings for Swagger/OpenAPI documentation
 SPECTACULAR_SETTINGS = {
