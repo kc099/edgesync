@@ -16,7 +16,7 @@ import websockets
 Usage:
     export DEVICE_TOKEN=<YOUR_DEVICE_TOKEN>
     # Optional overrides
-    export WS_URL=ws://localhost:8000/ws/sensors/
+    export WS_URL=ws://roboworksautomation.in/ws/sensors/
     export ENABLE_ENCRYPTION=true  # Enable field-level encryption
     python device_websocket_client_encrypted.py
 
@@ -24,8 +24,8 @@ The script will connect, receive encryption key, and send encrypted sensor data
 for sensitive sensor types while keeping metadata readable.
 """
 
-WS_URL = os.getenv("WS_URL", "ws://localhost:8000/ws/sensors/")
-DEVICE_TOKEN = os.getenv("DEVICE_TOKEN", "XWDWdQkDdmExLbBDKPAQu7dULLPp1dEYaj9l2FKHq9A")  # must be provided via env
+WS_URL = os.getenv("WS_URL", "wss://roboworksautomation.in/ws/sensors/")
+DEVICE_TOKEN = "8eRyt4NANKVRZOmRFNQ8NGWCHz2EyKqWxup8ljP25Dg"  # must be provided via env
 SEND_INTERVAL = float(os.getenv("SEND_INTERVAL", "2"))  # seconds
 ENABLE_ENCRYPTION = os.getenv("ENABLE_ENCRYPTION", "false").lower() == "true"
 
